@@ -62,7 +62,8 @@ export function getNearestEventDate(eventDetails: unknown) {
   const timestamps = list
     .map((event) => event?.date)
     .filter(Boolean)
-    .map((dateStr: string) => new Date(dateStr as string).getTime())
+    // PERBAIKAN: Menghapus ': string' agar TypeScript di Netlify tidak protes
+    .map((dateStr) => new Date(dateStr as string).getTime())
     .filter((t: number) => !Number.isNaN(t));
   if (!timestamps.length) return null;
   return new Date(Math.min(...timestamps));
@@ -105,24 +106,25 @@ export function buildThermalReceiptHtml(row: BookingRow, type: "dp" | "lunas", c
     })
     .join("");
 
-  // Logika Render Daftar Item Transaksi (Bisa 1 atau banyak paket)
-  let itemLines = "";
-  // Cast ke any sementara untuk membaca 'items' jika ke depannya DB Anda menyimpan array paket
-  const itemsArray = (row as any).items; 
+  // --- LOGIKA ITEM TRANSAKSI & TAMBAHAN ---
+  // 1. Ambil harga asli paket dari database
+  const basePkgPrice = Number(row.package_price || 0);
   
-  if (Array.isArray(itemsArray) && itemsArray.length > 0) {
-    // Jika ada lebih dari 1 paket / ada tambahan paket (format: [{name: "Paket A", type: "Audio", price: 1000000}])
-    itemLines = itemsArray.map((item: any) => {
-      const typeLabel = item.type ? `[${item.type}] ` : "";
-      const itemName = String(item.name || "Item Tambahan");
-      const itemPrice = Number(item.price || 0);
-      return `<div class="row"><span>${escapeHtml(typeLabel + itemName)}</span><span>${escapeHtml(formatRupiah(itemPrice))}</span></div>`;
-    }).join("");
-  } else {
-    // Fallback bawaan: Hanya ada 1 paket utama
-    const typeLabel = row.package_type ? `[${row.package_type}] ` : "";
-    const pkgName = String(row.package_name || "-");
-    itemLines = `<div class="row"><span>${escapeHtml(typeLabel + pkgName)}</span><span>${escapeHtml(formatRupiah(total))}</span></div>`;
+  // 2. Cegah error jika harga base = 0, kita pakai harga total agar tidak minus
+  const mainPrice = (basePkgPrice > 0 && basePkgPrice <= total) ? basePkgPrice : total;
+  
+  // 3. Selisih tagihan dianggap sebagai Biaya Tambahan (Layanan Ekstra / Custom)
+  const extraPrice = total - mainPrice;
+
+  const typeLabel = row.package_type ? `[${row.package_type}] ` : "";
+  const pkgName = String(row.package_name || "Paket Custom");
+
+  // Cetak Paket Utama dengan harga aslinya
+  let itemLines = `<div class="row"><span>${escapeHtml(typeLabel + pkgName)}</span><span>${escapeHtml(formatRupiah(mainPrice))}</span></div>`;
+
+  // Jika ada selisih biaya, cetak sebagai baris item tambahan
+  if (extraPrice > 0) {
+    itemLines += `<div class="row"><span>[Tambahan] Ekstra Layanan / Custom</span><span>${escapeHtml(formatRupiah(extraPrice))}</span></div>`;
   }
 
   const noteType = type === "dp" ? "NOTA PEMBAYARAN DP" : "NOTA PELUNASAN";
