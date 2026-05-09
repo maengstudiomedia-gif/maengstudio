@@ -40,6 +40,39 @@ async function getTrustedIp() {
   );
 }
 
+function getSafeCookieDomain(rawDomain: string | undefined, requestHost: string | null): string | undefined {
+  if (!rawDomain || !requestHost) return undefined;
+
+  // Normalize domain from env (strip protocol, path, and port).
+  const normalizedDomain = rawDomain
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .split("/")[0]
+    .split(":")[0]
+    .replace(/^\.+/, "");
+
+  const normalizedHost = requestHost
+    .trim()
+    .toLowerCase()
+    .split(":")[0]
+    .replace(/^\.+/, "");
+
+  if (!normalizedDomain || !normalizedHost) return undefined;
+
+  // Host-only cookie fallback for local and raw IP environments.
+  if (normalizedDomain === "localhost" || /^\d{1,3}(\.\d{1,3}){3}$/.test(normalizedDomain)) {
+    return undefined;
+  }
+
+  // Only allow setting Domain if it matches current host/superdomain.
+  if (normalizedHost === normalizedDomain || normalizedHost.endsWith(`.${normalizedDomain}`)) {
+    return normalizedDomain;
+  }
+
+  return undefined;
+}
+
 // ============================================================================
 // ACTION 1 & 2: CEK STATUS
 // ============================================================================
@@ -77,6 +110,7 @@ export async function secureLoginAction(formData: FormData) {
   const ip = await getTrustedIp();
   const headersList = await headers();
   const userAgent = headersList.get("user-agent") || "unknown";
+  const requestHost = headersList.get("x-forwarded-host") || headersList.get("host");
 
   // --- 0. ANTI DOUBLE-SUBMIT (DEBOUNCE) ---
   const debounceKey = `debounce:login:${ip}`;
@@ -216,9 +250,11 @@ export async function secureLoginAction(formData: FormData) {
 
     // Generate dan Set Device ID yang baru
     const secureDeviceId = crypto.randomBytes(32).toString('hex');
+    const cookieDomain = getSafeCookieDomain(process.env.NEXT_PUBLIC_APP_DOMAIN, requestHost);
+
     cookieStore.set({
       name: "maeng_device_id", value: secureDeviceId, httpOnly: true, secure: process.env.NODE_ENV === "production",
-      sameSite: "lax", path: "/", domain: process.env.NEXT_PUBLIC_APP_DOMAIN || undefined, maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax", path: "/", domain: cookieDomain, maxAge: 60 * 60 * 24 * 365,
     });
 
     // --- SOLUSI DEFINITIF: AMBIL ROLE PAKAI supabaseAdmin TERLEBIH DAHULU ---

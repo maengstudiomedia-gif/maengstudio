@@ -23,6 +23,8 @@ export default function LoginPage() {
   // STATE BARU: Untuk Intip Sandi & Tampilan Sukses
   const [showPassword, setShowPassword] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false); // Tampilan Sukses
+  const redirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const redirectFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // --- REFERENSI TURNSTILE UNTUK RESET OTOMATIS ---
   const turnstileRef = useRef<TurnstileInstance | null>(null);
@@ -36,6 +38,13 @@ export default function LoginPage() {
       setError("Captcha belum dikonfigurasi di server. Hubungi admin untuk melengkapi NEXT_PUBLIC_TURNSTILE_SITE_KEY.");
     }
   }, [isTurnstileConfigured]);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimeoutRef.current) clearTimeout(redirectTimeoutRef.current);
+      if (redirectFallbackRef.current) clearTimeout(redirectFallbackRef.current);
+    };
+  }, []);
 
   // 1. Cek Kunci IP saat halaman pertama dimuat
   useEffect(() => {
@@ -144,16 +153,21 @@ export default function LoginPage() {
       } else {
         // --- LOGIKA BARU: JIKA SUKSES ---
         setIsSuccess(true); // Ganti tampilan jadi layar sukses
+        setIsLoading(false);
+        setError("");
         
-        // Tahan 1.5 detik agar user bisa melihat pesan sukses, lalu pindah halaman
-        setTimeout(() => {
-          // MENGGUNAKAN ROUTER.PUSH SESUAI ROLE DARI AUTH.TS
-          if (result.role === 'admin') {
-            router.push('/admin/dashboard');
-          } else {
-            router.push('/client/profile'); 
-          }
-        }, 1500);
+        const targetPath = result.role === "admin" ? "/admin/dashboard" : "/client/profile";
+
+        // Tahan sebentar agar pesan sukses terlihat, lalu redirect normal.
+        redirectTimeoutRef.current = setTimeout(() => {
+          router.replace(targetPath);
+          router.refresh();
+        }, 1200);
+
+        // Fallback hard-redirect jika navigasi client gagal/tertahan.
+        redirectFallbackRef.current = setTimeout(() => {
+          window.location.href = targetPath;
+        }, 3000);
       }
     } catch (err) {
       // Menangani error jaringan yang tidak terduga
