@@ -23,6 +23,7 @@ export type BookingRow = {
   client_name?: string;
   client_phone?: string;
   package_name?: string;
+  package_price?: number;
   package_type?: string;
   event_type?: string;
   booker_type?: string;
