@@ -5,7 +5,8 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 
 export async function verifyAndOverrideDeviceAction(email: string, password: string) {
-  const cookieStore = cookies();
+  // PERBAIKAN: Tambahkan 'await' di sini karena Next.js terbaru mewajibkannya
+  const cookieStore = await cookies();
   
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

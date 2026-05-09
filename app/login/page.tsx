@@ -15,7 +15,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [lockoutTime, setLockoutTime] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isCheckingLock, setIsCheckingLock] = useState(true); 
   const [captchaState, setCaptchaState] = useState<"loading" | "ready" | "error">("loading");
 
   // STATE: Intip Sandi & Tampilan Sukses
@@ -63,9 +62,9 @@ export default function LoginPage() {
             clearTimeout(timer);
             resolve(value);
           })
-          .catch((err) => {
+          .catch((error) => {
             clearTimeout(timer);
-            reject(err);
+            reject(error);
           });
       });
 
@@ -78,11 +77,7 @@ export default function LoginPage() {
         }
       } catch {
         if (!isMounted) return;
-        // Hanya memunculkan modal info jika pengecekan gagal/lambat
         showAlert("Pengecekan keamanan awal sedang lambat. Anda tetap bisa lanjut login dengan verifikasi captcha.", "info");
-      } finally {
-        if (!isMounted) return;
-        setIsCheckingLock(false);
       }
     };
     
@@ -126,7 +121,6 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // --- PENCEGAHAN DOUBLE-SUBMIT & RACE CONDITION ---
     if (lockoutTime !== null || isLoading) return; 
     
     setIsLoading(true);
@@ -137,42 +131,38 @@ export default function LoginPage() {
     formData.append("cf-turnstile-response", turnstileToken);
     
     try {
-      const result = await secureLoginAction(formData);
+      // Menggunakan 'any' secara eksplisit untuk mencegah error dari properti yang mungkin belum terdaftar di interface TS
+      const result: any = await secureLoginAction(formData);
 
       if (!result.success) {
         if (result.isLocked) {
           setLockoutTime(result.lockoutTime!);
           showAlert("Akses Terkunci! Terlalu banyak percobaan gagal.", "error");
         } else {
-          // Gantikan Alert Bawaan/Inline dengan Modal
           showAlert(result.message ?? "Login gagal. Silakan periksa kembali email dan password Anda.", "error");
         }
         
-        // --- CRITICAL FIX: RESET TURNSTILE JIKA GAGAL ---
         setTurnstileToken(""); 
         turnstileRef.current?.reset();
-        setIsLoading(false); // Matikan loading jika gagal
+        setIsLoading(false);
         
       } else {
-        // --- LOGIKA BARU: JIKA SUKSES ---
-        setIsSuccess(true); // Ganti tampilan jadi layar sukses
+        setIsSuccess(true); 
         setIsLoading(false);
         
         const targetPath = result.redirectTo || (result.role === "admin" ? "/admin/dashboard" : "/client/profile");
 
-        // Tahan sebentar agar pesan sukses terlihat, lalu redirect normal.
         redirectTimeoutRef.current = setTimeout(() => {
           router.replace(targetPath);
           router.refresh();
         }, 1200);
 
-        // Fallback hard-redirect jika navigasi client gagal/tertahan.
         redirectFallbackRef.current = setTimeout(() => {
           window.location.href = targetPath;
         }, 3000);
       }
-    } catch (err) {
-      // Menangani error jaringan menggunakan Modal
+    } catch {
+      // Menghapus variabel 'err' karena tidak terpakai
       showAlert("Terjadi kesalahan jaringan. Silakan coba lagi.", "error");
       setTurnstileToken(""); 
       turnstileRef.current?.reset();
@@ -190,7 +180,6 @@ export default function LoginPage() {
 
       <div className="relative z-10 max-w-md w-full backdrop-blur-[40px] bg-white/[0.02] border border-white/[0.05] p-10 rounded-3xl shadow-[0_0_80px_-20px_rgba(0,0,0,1)] transition-all duration-500">
         
-        {/* === TAMPILAN 1: BERHASIL LOGIN === */}
         {isSuccess ? (
            <div className="text-center animate-in fade-in zoom-in duration-500 py-6">
              <div className="mx-auto w-24 h-24 bg-amber-500/10 border border-amber-500/20 rounded-full flex flex-col items-center justify-center mb-6 shadow-[0_0_40px_rgba(245,158,11,0.2)]">
@@ -206,8 +195,6 @@ export default function LoginPage() {
              </div>
            </div>
         ) : (
-
-        /* === TAMPILAN 2: FORM LOGIN (ASLI) === */
         <>
           <div className="text-center mb-10">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-300 mb-6 shadow-[0_0_30px_rgba(245,158,11,0.3)]">
@@ -228,7 +215,6 @@ export default function LoginPage() {
               </div>
             )}
 
-            {/* Input Email Glass */}
             <div>
               <div className="relative">
                 <Mail className="absolute left-4 top-4 h-5 w-5 text-white/40" />
@@ -257,7 +243,6 @@ export default function LoginPage() {
               )}
             </div>
 
-            {/* Input Password Glass DENGAN FITUR INTIP SANDI */}
             <div className="relative">
               <Lock className="absolute left-4 top-4 h-5 w-5 text-white/40" />
               <input
@@ -270,7 +255,6 @@ export default function LoginPage() {
                 required
               />
               
-              {/* TOMBOL MATA UNTUK INTIP SANDI */}
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
@@ -288,7 +272,6 @@ export default function LoginPage() {
               </Link>
             </div>
 
-            {/* CLOUDFLARE TURNSTILE MODE RAMAH MOBILE */}
             {isTurnstileConfigured ? (
               <Turnstile
                 ref={turnstileRef} 
@@ -305,7 +288,6 @@ export default function LoginPage() {
                   showAlert("Turnstile gagal dimuat. Pastikan domain deploy sudah terdaftar di Cloudflare Turnstile dan adblock dimatikan.", "error");
                 }}
                 onExpire={() => {
-                  // Jika user kelamaan diam dan token kedaluwarsa, paksa minta ulang ke Cloudflare
                   setTurnstileToken("");
                   setCaptchaState("loading");
                   turnstileRef.current?.reset();
@@ -338,7 +320,6 @@ export default function LoginPage() {
               )}
             </div>
 
-            {/* Glass Button Dinamis */}
             <button 
               type="submit" 
               disabled={isButtonDisabled}
@@ -363,7 +344,6 @@ export default function LoginPage() {
         )}
       </div>
 
-      {/* --- KOMPONEN UI MODAL NOTIFIKASI --- */}
       {alertModal.isOpen && (
         <div className="fixed inset-0 z-[999999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-3xl p-6 space-y-4 text-center shadow-2xl animate-in zoom-in duration-200">
