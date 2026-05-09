@@ -5,6 +5,7 @@ import { createServerClient } from "@supabase/ssr"; // <--- WAJIB UNTUK MENGATAS
 import { headers, cookies } from "next/headers";
 import crypto from "crypto";
 import { Redis } from "@upstash/redis";
+import { maengDeviceIdCookieAttrs, deviceBindGraceKey } from "@/lib/maeng-device-cookie";
 
 // ==========================================
 // INISIALISASI KLIEN
@@ -38,39 +39,6 @@ async function getTrustedIp() {
     headersList.get("cf-connecting-ip") || 
     "127.0.0.1" 
   );
-}
-
-function getSafeCookieDomain(rawDomain: string | undefined, requestHost: string | null): string | undefined {
-  if (!rawDomain || !requestHost) return undefined;
-
-  // Normalize domain from env (strip protocol, path, and port).
-  const normalizedDomain = rawDomain
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .split("/")[0]
-    .split(":")[0]
-    .replace(/^\.+/, "");
-
-  const normalizedHost = requestHost
-    .trim()
-    .toLowerCase()
-    .split(":")[0]
-    .replace(/^\.+/, "");
-
-  if (!normalizedDomain || !normalizedHost) return undefined;
-
-  // Host-only cookie fallback for local and raw IP environments.
-  if (normalizedDomain === "localhost" || /^\d{1,3}(\.\d{1,3}){3}$/.test(normalizedDomain)) {
-    return undefined;
-  }
-
-  // Only allow setting Domain if it matches current host/superdomain.
-  if (normalizedHost === normalizedDomain || normalizedHost.endsWith(`.${normalizedDomain}`)) {
-    return normalizedDomain;
-  }
-
-  return undefined;
 }
 
 // ============================================================================
@@ -250,11 +218,10 @@ export async function secureLoginAction(formData: FormData) {
 
     // Generate dan Set Device ID yang baru
     const secureDeviceId = crypto.randomBytes(32).toString('hex');
-    const cookieDomain = getSafeCookieDomain(process.env.NEXT_PUBLIC_APP_DOMAIN, requestHost);
-
     cookieStore.set({
-      name: "maeng_device_id", value: secureDeviceId, httpOnly: true, secure: process.env.NODE_ENV === "production",
-      sameSite: "lax", path: "/", domain: cookieDomain, maxAge: 60 * 60 * 24 * 365,
+      name: "maeng_device_id",
+      value: secureDeviceId,
+      ...maengDeviceIdCookieAttrs(requestHost),
     });
 
     // --- SOLUSI DEFINITIF: AMBIL ROLE PAKAI supabaseAdmin TERLEBIH DAHULU ---
@@ -291,6 +258,11 @@ export async function secureLoginAction(formData: FormData) {
         }
       });
     }
+
+    // Sinkronkan JWT/session cookie ke metadata terbaru (hindari device-mismatch tepat setelah login).
+    await supabaseSSR.auth.refreshSession();
+
+    await redis.set(deviceBindGraceKey(authData.user.id), secureDeviceId, { ex: 180 });
 
     supabaseAdmin.from("login_logs").insert([{ 
       email, status: "success", ip_address: ip, device_id: secureDeviceId, pattern: "normal_login"

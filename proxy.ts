@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { Redis } from "@upstash/redis";
+import { deviceBindGraceKey, maengDeviceIdCookieAttrs } from "@/lib/maeng-device-cookie";
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL!,
@@ -48,9 +49,13 @@ export async function proxy(request: NextRequest) {
   // Fallback untuk edge/runtime tertentu: jika verifikasi user gagal
   // tetapi cookie sesi Supabase ada, coba baca sesi dari cookie.
   if (!authUser || authError) {
-    const hasSupabaseSessionCookie = request.cookies
-      .getAll()
-      .some((c) => c.name.startsWith("sb-") && c.name.endsWith("-auth-token"));
+    const hasSupabaseSessionCookie = request.cookies.getAll().some((c) => {
+      const n = c.name;
+      return (
+        n.startsWith("sb-") &&
+        (n.includes("auth-token") || n.includes("refresh-token"))
+      );
+    });
 
     if (hasSupabaseSessionCookie) {
       const {
@@ -85,11 +90,25 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL("/login?error=account_locked", request.url));
     }
 
-    const boundDeviceId = authUser.user_metadata?.bound_device_id;
+    const boundDeviceId = authUser.user_metadata?.bound_device_id as string | undefined;
     const currentDeviceId = request.cookies.get("maeng_device_id")?.value;
+    const requestHostHdr =
+      request.headers.get("x-forwarded-host")?.split(",")[0]?.trim() ||
+      request.headers.get("host") ||
+      null;
+
     if (boundDeviceId && boundDeviceId !== currentDeviceId) {
-      await supabase.auth.signOut();
-      return NextResponse.redirect(new URL("/login?error=device_mismatch", request.url));
+      const grace = await redis.get<string>(deviceBindGraceKey(authUser.id));
+
+      const canHealGrace = grace === boundDeviceId && typeof boundDeviceId === "string";
+
+      if (canHealGrace) {
+        response.cookies.set("maeng_device_id", boundDeviceId, maengDeviceIdCookieAttrs(requestHostHdr));
+        await redis.del(deviceBindGraceKey(authUser.id));
+      } else {
+        await supabase.auth.signOut();
+        return NextResponse.redirect(new URL("/login?error=device_mismatch", request.url));
+      }
     }
     // Jangan gunakan last_sign_in_at sebagai timeout request-by-request;
     // nilai ini tidak berubah di setiap request dan bisa memicu logout palsu.
