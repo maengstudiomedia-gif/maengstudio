@@ -9,6 +9,8 @@ import { secureLoginAction, checkEmailStatusAction, checkIpStatusAction } from "
 
 export default function LoginPage() {
   const router = useRouter(); // Untuk pindah halaman
+  const turnstileSiteKey = (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "").trim();
+  const isTurnstileConfigured = turnstileSiteKey.length > 0;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -27,6 +29,13 @@ export default function LoginPage() {
   const [turnstileToken, setTurnstileToken] = useState<string>("");
 
   const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+  useEffect(() => {
+    if (!isTurnstileConfigured) {
+      setCaptchaState("error");
+      setError("Captcha belum dikonfigurasi di server. Hubungi admin untuk melengkapi NEXT_PUBLIC_TURNSTILE_SITE_KEY.");
+    }
+  }, [isTurnstileConfigured]);
 
   // 1. Cek Kunci IP saat halaman pertama dimuat
   useEffect(() => {
@@ -158,7 +167,7 @@ export default function LoginPage() {
   const isEmailValid = validateEmail(email);
   
   // Tombol lumpuh jika ada yang belum valid ATAU jika form sedang memproses request (isLoading)
-  const isButtonDisabled = !email || !password || !isEmailValid || lockoutTime !== null || isLoading || !turnstileToken;
+  const isButtonDisabled = !email || !password || !isEmailValid || lockoutTime !== null || isLoading || !turnstileToken || !isTurnstileConfigured;
 
   return (
     <div className="relative min-h-screen flex items-center justify-center bg-[#050505] overflow-hidden px-4">
@@ -279,27 +288,34 @@ export default function LoginPage() {
             </div>
 
             {/* CLOUDFLARE TURNSTILE MODE RAMAH MOBILE */}
-            <Turnstile
-              ref={turnstileRef} 
-              siteKey={process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || ""}
-              options={{ theme: "auto", size: "flexible" }}
-              onWidgetLoad={() => setCaptchaState("ready")}
-              onSuccess={(token) => {
-                setTurnstileToken(token);
-                setCaptchaState("ready");
-              }}
-              onError={() => {
-                setTurnstileToken("");
-                setCaptchaState("error");
-                setError("Verifikasi keamanan gagal dimuat. Coba refresh halaman atau nonaktifkan pemblokir konten.");
-              }}
-              onExpire={() => {
-                // Jika user kelamaan diam dan token kedaluwarsa, paksa minta ulang ke Cloudflare
-                setTurnstileToken("");
-                setCaptchaState("loading");
-                turnstileRef.current?.reset();
-              }}
-            />
+            {isTurnstileConfigured ? (
+              <Turnstile
+                ref={turnstileRef} 
+                siteKey={turnstileSiteKey}
+                options={{ theme: "auto", size: "flexible" }}
+                onWidgetLoad={() => setCaptchaState("ready")}
+                onSuccess={(token) => {
+                  setTurnstileToken(token);
+                  setCaptchaState("ready");
+                }}
+                onError={() => {
+                  setTurnstileToken("");
+                  setCaptchaState("error");
+                  setError("Turnstile gagal dimuat. Pastikan domain deploy sudah terdaftar di Cloudflare Turnstile dan adblock dimatikan.");
+                }}
+                onExpire={() => {
+                  // Jika user kelamaan diam dan token kedaluwarsa, paksa minta ulang ke Cloudflare
+                  setTurnstileToken("");
+                  setCaptchaState("loading");
+                  turnstileRef.current?.reset();
+                }}
+              />
+            ) : (
+              <div className="flex items-center gap-2 text-red-300/90 text-xs bg-red-500/10 backdrop-blur-md p-3 rounded-xl border border-red-500/20">
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>Captcha tidak aktif: NEXT_PUBLIC_TURNSTILE_SITE_KEY belum tersedia di environment deployment.</span>
+              </div>
+            )}
             <div className="text-xs">
               {captchaState === "loading" && (
                 <div className="flex items-center gap-2 text-white/60">
