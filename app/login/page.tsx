@@ -124,7 +124,7 @@ export default function LoginPage() {
         if (result.isLocked) {
           setLockoutTime(result.lockoutTime!);
         } else {
-          setError(result.message);
+          setError(result.message ?? "Login gagal. Silakan coba lagi.");
         }
         
         // --- CRITICAL FIX: RESET TURNSTILE JIKA GAGAL ---

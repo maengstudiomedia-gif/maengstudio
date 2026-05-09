@@ -31,8 +31,10 @@ export async function updateBookingPaymentAction(bookingId: string, paymentType:
     }
 
     const eventDates = parseEventDetails(booking.event_details)
-      .map((e) => e?.date).filter(Boolean)
-      .map((d: string) => new Date(d).getTime()).filter((t: number) => !Number.isNaN(t));
+      .map((e) => e?.date)
+      .filter((d): d is string => typeof d === "string" && d.length > 0)
+      .map((d) => new Date(d).getTime())
+      .filter((t) => !Number.isNaN(t));
     
     if (eventDates.length) {
       const diffMs = Math.min(...eventDates) - Date.now();
