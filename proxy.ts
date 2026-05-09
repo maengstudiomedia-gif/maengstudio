@@ -53,7 +53,7 @@ export async function proxy(request: NextRequest) {
       if (isProtectedAPI) {
         return new NextResponse(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
       }
-      return NextResponse.redirect(new URL("/login", request.url));
+      return NextResponse.redirect(new URL("/login?error=unauthorized", request.url));
     }
 
     const isLocked = await redis.get(`lockout:user:${user.email}`);

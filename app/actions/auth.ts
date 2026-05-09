@@ -274,13 +274,23 @@ export async function secureLoginAction(formData: FormData) {
     const redirectTo = finalRole === "admin" ? "/admin/dashboard" : "/client/profile";
 
     // --- SINKRONISASI KE METADATA (TERMASUK ROLE) ---
-    // Simpan Device ID DAN Role ke Meta Data agar Middleware bisa membacanya tanpa panggil database
-    await supabaseAdmin.auth.admin.updateUserById(authData.user.id, {
-      user_metadata: { 
+    // Prioritaskan update lewat sesi user aktif agar token/cookie ikut sinkron.
+    const { error: updateSessionMetaError } = await supabaseSSR.auth.updateUser({
+      data: {
         bound_device_id: secureDeviceId,
-        role: finalRole 
-      }
+        role: finalRole,
+      },
     });
+
+    // Fallback admin update jika update via session gagal.
+    if (updateSessionMetaError) {
+      await supabaseAdmin.auth.admin.updateUserById(authData.user.id, {
+        user_metadata: { 
+          bound_device_id: secureDeviceId,
+          role: finalRole 
+        }
+      });
+    }
 
     supabaseAdmin.from("login_logs").insert([{ 
       email, status: "success", ip_address: ip, device_id: secureDeviceId, pattern: "normal_login"
