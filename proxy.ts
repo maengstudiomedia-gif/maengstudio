@@ -42,6 +42,29 @@ export async function proxy(request: NextRequest) {
     error,
   } = await supabase.auth.getUser();
 
+  let authUser = user;
+  let authError = error;
+
+  // Fallback untuk edge/runtime tertentu: jika verifikasi user gagal
+  // tetapi cookie sesi Supabase ada, coba baca sesi dari cookie.
+  if (!authUser || authError) {
+    const hasSupabaseSessionCookie = request.cookies
+      .getAll()
+      .some((c) => c.name.startsWith("sb-") && c.name.endsWith("-auth-token"));
+
+    if (hasSupabaseSessionCookie) {
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession();
+
+      if (session?.user) {
+        authUser = session.user;
+        authError = sessionError ?? null;
+      }
+    }
+  }
+
   const isProtectedUI =
     request.nextUrl.pathname.startsWith("/(Dashboard)") ||
     request.nextUrl.pathname.startsWith("/admin") ||
@@ -49,20 +72,20 @@ export async function proxy(request: NextRequest) {
   const isProtectedAPI = request.nextUrl.pathname.startsWith("/api/protected");
 
   if (isProtectedUI || isProtectedAPI) {
-    if (!user || error) {
+    if (!authUser || authError) {
       if (isProtectedAPI) {
         return new NextResponse(JSON.stringify({ error: "Unauthorized" }), { status: 401 });
       }
       return NextResponse.redirect(new URL("/login?error=unauthorized", request.url));
     }
 
-    const isLocked = await redis.get(`lockout:user:${user.email}`);
+    const isLocked = await redis.get(`lockout:user:${authUser.email}`);
     if (isLocked) {
       await supabase.auth.signOut();
       return NextResponse.redirect(new URL("/login?error=account_locked", request.url));
     }
 
-    const boundDeviceId = user.user_metadata?.bound_device_id;
+    const boundDeviceId = authUser.user_metadata?.bound_device_id;
     const currentDeviceId = request.cookies.get("maeng_device_id")?.value;
     if (boundDeviceId && boundDeviceId !== currentDeviceId) {
       await supabase.auth.signOut();
@@ -71,12 +94,12 @@ export async function proxy(request: NextRequest) {
     // Jangan gunakan last_sign_in_at sebagai timeout request-by-request;
     // nilai ini tidak berubah di setiap request dan bisa memicu logout palsu.
     // Validitas sesi tetap dijaga oleh Supabase JWT + refresh token.
-    let role = user.user_metadata?.role as string | undefined;
+    let role = authUser.user_metadata?.role as string | undefined;
     if (!role) {
       const { data: profileData } = await supabase
         .from("profiles")
         .select("role")
-        .eq("id", user.id)
+        .eq("id", authUser.id)
         .single();
       role = profileData?.role || "client";
     }
