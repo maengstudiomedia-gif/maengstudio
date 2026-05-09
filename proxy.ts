@@ -68,17 +68,19 @@ export async function proxy(request: NextRequest) {
       await supabase.auth.signOut();
       return NextResponse.redirect(new URL("/login?error=device_mismatch", request.url));
     }
-
-    const lastSignInAt = new Date(user.last_sign_in_at || "").getTime();
-    const now = Date.now();
-    const FIVE_MINUTES = 5 * 60 * 1000;
-
-    if (now - lastSignInAt > FIVE_MINUTES) {
-      await supabase.auth.signOut();
-      return NextResponse.redirect(new URL("/login?error=session_timeout", request.url));
+    // Jangan gunakan last_sign_in_at sebagai timeout request-by-request;
+    // nilai ini tidak berubah di setiap request dan bisa memicu logout palsu.
+    // Validitas sesi tetap dijaga oleh Supabase JWT + refresh token.
+    let role = user.user_metadata?.role as string | undefined;
+    if (!role) {
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+      role = profileData?.role || "client";
     }
 
-    const role = user.user_metadata?.role || "client";
     const path = request.nextUrl.pathname;
 
     if (path.startsWith("/admin") && role !== "admin") {

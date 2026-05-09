@@ -156,7 +156,7 @@ export default function LoginPage() {
         setIsLoading(false);
         setError("");
         
-        const targetPath = result.role === "admin" ? "/admin/dashboard" : "/client/profile";
+        const targetPath = result.redirectTo || (result.role === "admin" ? "/admin/dashboard" : "/client/profile");
 
         // Tahan sebentar agar pesan sukses terlihat, lalu redirect normal.
         redirectTimeoutRef.current = setTimeout(() => {

@@ -271,6 +271,7 @@ export async function secureLoginAction(formData: FormData) {
     }
 
     const finalRole = profileData?.role || 'client';
+    const redirectTo = finalRole === "admin" ? "/admin/dashboard" : "/client/profile";
 
     // --- SINKRONISASI KE METADATA (TERMASUK ROLE) ---
     // Simpan Device ID DAN Role ke Meta Data agar Middleware bisa membacanya tanpa panggil database
@@ -287,7 +288,8 @@ export async function secureLoginAction(formData: FormData) {
 
     return { 
       success: true, 
-      role: finalRole 
+      role: finalRole,
+      redirectTo
     };
   }
 }
