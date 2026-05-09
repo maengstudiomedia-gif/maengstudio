@@ -1,47 +1,54 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Lock, Mail, AlertCircle, CheckCircle2, Clock, Eye, EyeOff, ShieldCheck, Loader2, Info } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Lock, Mail, AlertCircle, CheckCircle2, Clock, Eye, EyeOff, ShieldCheck, Loader2, Info, ShieldAlert } from "lucide-react";
 import { Turnstile, TurnstileInstance } from "@marsidev/react-turnstile"; 
 import { secureLoginAction, checkEmailStatusAction, checkIpStatusAction } from "@/app/actions/auth";
+import { verifyAndOverrideDeviceAction } from "@/app/actions/authActions"; 
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const errorParam = searchParams.get("error");
+  
+  // PENENTU APAKAH HALAMAN INI HARUS JADI FORM GANTI PERANGKAT
+  const isDeviceMismatch = errorParam === "device_mismatch";
+
   const turnstileSiteKey = (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "").trim();
   const isTurnstileConfigured = turnstileSiteKey.length > 0;
+  
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [lockoutTime, setLockoutTime] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [captchaState, setCaptchaState] = useState<"loading" | "ready" | "error">("loading");
 
-  // STATE: Intip Sandi & Tampilan Sukses
   const [showPassword, setShowPassword] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false); 
   const redirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const redirectFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // --- STATE UNTUK MODAL NOTIFIKASI PROFESIONAL ---
+  // --- STATE UNTUK MODAL NOTIFIKASI ---
   const [alertModal, setAlertModal] = useState<{ isOpen: boolean; message: string; type: "success" | "error" | "info" }>({ isOpen: false, message: "", type: "info" });
 
   const showAlert = (message: string, type: "success" | "error" | "info" = "info") => {
     setAlertModal({ isOpen: true, message, type });
   };
 
-  // --- REFERENSI TURNSTILE UNTUK RESET OTOMATIS ---
   const turnstileRef = useRef<TurnstileInstance | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string>("");
 
   const validateEmail = (email: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   useEffect(() => {
-    if (!isTurnstileConfigured) {
+    // Captcha tidak diwajibkan untuk form ganti perangkat
+    if (!isTurnstileConfigured && !isDeviceMismatch) {
       setCaptchaState("error");
       showAlert("Captcha belum dikonfigurasi di server. Hubungi admin untuk melengkapi NEXT_PUBLIC_TURNSTILE_SITE_KEY.", "error");
     }
-  }, [isTurnstileConfigured]);
+  }, [isTurnstileConfigured, isDeviceMismatch]);
 
   useEffect(() => {
     return () => {
@@ -53,40 +60,27 @@ export default function LoginPage() {
   // 1. Cek Kunci IP saat halaman pertama dimuat
   useEffect(() => {
     let isMounted = true;
+    if (isDeviceMismatch) return; // Lewati jika sedang mode ganti perangkat
 
     const withTimeout = <T,>(promise: Promise<T>, ms: number): Promise<T> =>
       new Promise((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error("timeout")), ms);
-        promise
-          .then((value) => {
-            clearTimeout(timer);
-            resolve(value);
-          })
-          .catch((error) => {
-            clearTimeout(timer);
-            reject(error);
-          });
+        promise.then((value) => { clearTimeout(timer); resolve(value); }).catch((error) => { clearTimeout(timer); reject(error); });
       });
 
     const verifyInitialSecurity = async () => {
       try {
         const ipStatus = await withTimeout(checkIpStatusAction(), 4000);
         if (!isMounted) return;
-        if (ipStatus.isLocked && ipStatus.lockoutTime) {
-          setLockoutTime(ipStatus.lockoutTime);
-        }
+        if (ipStatus.isLocked && ipStatus.lockoutTime) setLockoutTime(ipStatus.lockoutTime);
       } catch {
         if (!isMounted) return;
         showAlert("Pengecekan keamanan awal sedang lambat. Anda tetap bisa lanjut login dengan verifikasi captcha.", "info");
       }
     };
-    
     verifyInitialSecurity();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    return () => { isMounted = false; };
+  }, [isDeviceMismatch]);
 
   // 2. Efek Countdown Timer
   useEffect(() => {
@@ -107,7 +101,7 @@ export default function LoginPage() {
   };
 
   const handleBlurEmail = async () => {
-    if (!validateEmail(email)) return;
+    if (!validateEmail(email) || isDeviceMismatch) return;
     const status = await checkEmailStatusAction(email);
     
     if (status.isLocked && status.lockoutTime) {
@@ -118,11 +112,29 @@ export default function LoginPage() {
     }
   };
 
+  // --- HANDLER 1: MENGHAPUS & MENGGANTI PERANGKAT LAMA ---
+  const handleOverrideDevice = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    const res = await verifyAndOverrideDeviceAction(email, password);
+    
+    if (res.success) {
+      setIsSuccess(true);
+      setIsLoading(false);
+      
+      const targetPath = res.role === "admin" ? "/admin/dashboard" : "/client/profile";
+      redirectTimeoutRef.current = setTimeout(() => { router.replace(targetPath); router.refresh(); }, 1200);
+    } else {
+      showAlert(res.error || "Gagal memverifikasi akun. Email atau password salah.", "error");
+      setIsLoading(false);
+    }
+  };
+
+  // --- HANDLER 2: LOGIN STANDAR NORMAL ---
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     if (lockoutTime !== null || isLoading) return; 
-    
     setIsLoading(true);
 
     const formData = new FormData();
@@ -131,7 +143,6 @@ export default function LoginPage() {
     formData.append("cf-turnstile-response", turnstileToken);
     
     try {
-      // Menggunakan 'any' secara eksplisit untuk mencegah error dari properti yang mungkin belum terdaftar di interface TS
       const result: any = await secureLoginAction(formData);
 
       if (!result.success) {
@@ -141,28 +152,17 @@ export default function LoginPage() {
         } else {
           showAlert(result.message ?? "Login gagal. Silakan periksa kembali email dan password Anda.", "error");
         }
-        
         setTurnstileToken(""); 
         turnstileRef.current?.reset();
         setIsLoading(false);
-        
       } else {
         setIsSuccess(true); 
         setIsLoading(false);
-        
         const targetPath = result.redirectTo || (result.role === "admin" ? "/admin/dashboard" : "/client/profile");
-
-        redirectTimeoutRef.current = setTimeout(() => {
-          router.replace(targetPath);
-          router.refresh();
-        }, 1200);
-
-        redirectFallbackRef.current = setTimeout(() => {
-          window.location.href = targetPath;
-        }, 3000);
+        redirectTimeoutRef.current = setTimeout(() => { router.replace(targetPath); router.refresh(); }, 1200);
+        redirectFallbackRef.current = setTimeout(() => { window.location.href = targetPath; }, 3000);
       }
     } catch {
-      // Menghapus variabel 'err' karena tidak terpakai
       showAlert("Terjadi kesalahan jaringan. Silakan coba lagi.", "error");
       setTurnstileToken(""); 
       turnstileRef.current?.reset();
@@ -171,187 +171,145 @@ export default function LoginPage() {
   };
 
   const isEmailValid = validateEmail(email);
-  const isButtonDisabled = !email || !password || !isEmailValid || lockoutTime !== null || isLoading || !turnstileToken || !isTurnstileConfigured;
+  const isStandardButtonDisabled = !email || !password || !isEmailValid || lockoutTime !== null || isLoading || !turnstileToken || !isTurnstileConfigured;
+  const isOverrideButtonDisabled = !email || !password || !isEmailValid || isLoading;
 
   return (
     <div className="relative min-h-screen flex items-center justify-center bg-[#050505] overflow-hidden px-4">
-      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-amber-600/10 blur-[120px] pointer-events-none"></div>
+      <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/10 blur-[120px] pointer-events-none"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-zinc-600/20 blur-[120px] pointer-events-none"></div>
 
       <div className="relative z-10 max-w-md w-full backdrop-blur-[40px] bg-white/[0.02] border border-white/[0.05] p-10 rounded-3xl shadow-[0_0_80px_-20px_rgba(0,0,0,1)] transition-all duration-500">
         
+        {/* === TAMPILAN 1: BERHASIL LOGIN === */}
         {isSuccess ? (
            <div className="text-center animate-in fade-in zoom-in duration-500 py-6">
-             <div className="mx-auto w-24 h-24 bg-amber-500/10 border border-amber-500/20 rounded-full flex flex-col items-center justify-center mb-6 shadow-[0_0_40px_rgba(245,158,11,0.2)]">
-               <ShieldCheck className="w-12 h-12 text-amber-500 mb-1" />
+             <div className="mx-auto w-24 h-24 bg-blue-500/10 border border-blue-500/20 rounded-full flex flex-col items-center justify-center mb-6 shadow-[0_0_40px_rgba(37,99,235,0.2)]">
+               <ShieldCheck className="w-12 h-12 text-blue-500 mb-1" />
              </div>
              <h2 className="text-2xl font-light text-white tracking-wide mb-2">Akses Diberikan</h2>
              <p className="text-white/50 text-sm leading-relaxed mb-6">
                Verifikasi identitas berhasil. <br/> Mengenkripsi sesi Anda...
              </p>
-             <div className="flex justify-center items-center space-x-2 text-amber-500 text-sm">
+             <div className="flex justify-center items-center space-x-2 text-blue-500 text-sm">
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>Mengarahkan ke Dashboard</span>
              </div>
            </div>
-        ) : (
-        <>
-          <div className="text-center mb-10">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-tr from-amber-500 to-yellow-300 mb-6 shadow-[0_0_30px_rgba(245,158,11,0.3)]">
-              <img src="/favicon.ico" alt="Maeng Studio" className="w-8 h-8 object-contain" />
-            </div>
-            <h1 className="text-3xl font-light text-white tracking-wide">MAENG <span className="font-bold">STUDIO</span></h1>
-            <p className="text-zinc-400 mt-2 text-sm uppercase tracking-widest opacity-80">Dokumentasi & Audio System</p>
-          </div>
 
-          <form onSubmit={handleLogin} className="space-y-6">
-            {lockoutTime !== null && (
-              <div className="flex items-start text-red-400 text-sm bg-red-500/10 backdrop-blur-md p-4 rounded-xl border border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
-                <Clock className="w-5 h-5 mr-3 flex-shrink-0 mt-0.5 animate-pulse" />
-                <div>
-                  <p className="font-bold mb-1">Akses Terkunci Sementara</p>
-                  <p>Terlalu banyak percobaan gagal. Silakan coba lagi dalam <span className="font-bold text-white">{formatTime(lockoutTime)}</span></p>
-                </div>
+        ) : isDeviceMismatch ? (
+
+          /* === TAMPILAN 2: FORM MERAH (GANTI PERANGKAT) === */
+          <form onSubmit={handleOverrideDevice} className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+            <div className="flex flex-col items-center text-center space-y-3 mb-4">
+              <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-full flex items-center justify-center border border-red-500/20">
+                <ShieldAlert className="w-8 h-8 animate-pulse" />
               </div>
-            )}
+              <h2 className="text-2xl font-bold text-white tracking-tight">Perangkat Baru Terdeteksi</h2>
+              <p className="text-sm text-white/50 leading-relaxed">
+                Demi keamanan, Anda harus login kembali menggunakan Email & Password Anda untuk mencabut akses dari perangkat lama dan memindahkannya ke perangkat saat ini.
+              </p>
+            </div>
 
-            <div>
+            <div className="space-y-4">
               <div className="relative">
                 <Mail className="absolute left-4 top-4 h-5 w-5 text-white/40" />
-                <input
-                  type="email"
-                  placeholder="Alamat Email"
-                  disabled={lockoutTime !== null || isLoading}
-                  className={`w-full bg-white/[0.03] backdrop-blur-md text-white placeholder-white/30 text-sm rounded-xl py-4 pl-12 pr-10 focus:outline-none transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-                    email && !isEmailValid 
-                      ? 'border-red-500/50 focus:border-red-500/70 focus:bg-red-500/[0.02]' 
-                      : 'border-white/[0.05] focus:border-amber-500/50 focus:bg-white/[0.06]'
-                  }`}
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  onBlur={handleBlurEmail}
-                  required
-                />
-                {email && isEmailValid && (
-                  <div className="absolute right-4 top-4">
-                    <CheckCircle2 className="h-5 w-5 text-amber-500" />
-                  </div>
-                )}
+                <input type="email" placeholder="Email Anda" required disabled={isLoading} value={email} onChange={(e) => setEmail(e.target.value)}
+                  className="w-full bg-white/[0.03] backdrop-blur-md border border-white/10 rounded-xl py-3.5 pl-12 pr-4 text-white focus:border-red-500 outline-none transition-colors" />
               </div>
-              {email && !isEmailValid && (
-                <p className="text-red-400/90 text-[10px] mt-1.5 px-1">Format email tidak valid.</p>
-              )}
-            </div>
-
-            <div className="relative">
-              <Lock className="absolute left-4 top-4 h-5 w-5 text-white/40" />
-              <input
-                type={showPassword ? "text" : "password"}
-                placeholder="Kata Sandi"
-                disabled={lockoutTime !== null || isLoading}
-                className="w-full bg-white/[0.03] backdrop-blur-md border border-white/[0.05] text-white placeholder-white/30 text-sm rounded-xl py-4 pl-12 pr-12 focus:outline-none focus:border-amber-500/50 focus:bg-white/[0.06] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-              
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-4 text-white/40 hover:text-white transition-colors disabled:opacity-30"
-                disabled={lockoutTime !== null || isLoading}
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between text-sm">
-              <Link href="/forgot-password" className="text-white/60 hover:text-amber-500 transition-colors ml-auto">
-                Lupa sandi?
-              </Link>
-            </div>
-
-            {isTurnstileConfigured ? (
-              <Turnstile
-                ref={turnstileRef} 
-                siteKey={turnstileSiteKey}
-                options={{ theme: "auto", size: "flexible" }}
-                onWidgetLoad={() => setCaptchaState("ready")}
-                onSuccess={(token) => {
-                  setTurnstileToken(token);
-                  setCaptchaState("ready");
-                }}
-                onError={() => {
-                  setTurnstileToken("");
-                  setCaptchaState("error");
-                  showAlert("Turnstile gagal dimuat. Pastikan domain deploy sudah terdaftar di Cloudflare Turnstile dan adblock dimatikan.", "error");
-                }}
-                onExpire={() => {
-                  setTurnstileToken("");
-                  setCaptchaState("loading");
-                  turnstileRef.current?.reset();
-                }}
-              />
-            ) : (
-              <div className="flex items-center gap-2 text-red-300/90 text-xs bg-red-500/10 backdrop-blur-md p-3 rounded-xl border border-red-500/20">
-                <AlertCircle className="w-3.5 h-3.5" />
-                <span>Captcha tidak aktif: NEXT_PUBLIC_TURNSTILE_SITE_KEY belum tersedia di environment deployment.</span>
+              <div className="relative">
+                <Lock className="absolute left-4 top-4 h-5 w-5 text-white/40" />
+                <input type={showPassword ? "text" : "password"} placeholder="Password" required disabled={isLoading} value={password} onChange={(e) => setPassword(e.target.value)}
+                  className="w-full bg-white/[0.03] backdrop-blur-md border border-white/10 rounded-xl py-3.5 pl-12 pr-12 text-white focus:border-red-500 outline-none transition-colors" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} disabled={isLoading} className="absolute right-4 top-4 text-white/40 hover:text-white transition-colors">
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
               </div>
-            )}
-            <div className="text-xs">
-              {captchaState === "loading" && (
-                <div className="flex items-center gap-2 text-white/60">
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Memuat verifikasi keamanan...</span>
-                </div>
-              )}
-              {captchaState === "ready" && !turnstileToken && (
-                <div className="flex items-center gap-2 text-amber-300/90">
-                  <Clock className="w-3.5 h-3.5" />
-                  <span>Verifikasi siap, tunggu token keamanan...</span>
-                </div>
-              )}
-              {captchaState === "ready" && turnstileToken && (
-                <div className="flex items-center gap-2 text-green-300/90">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Verifikasi keamanan siap. Anda bisa login.</span>
-                </div>
-              )}
             </div>
 
-            <button 
-              type="submit" 
-              disabled={isButtonDisabled}
-              className={`w-full font-semibold rounded-xl py-4 transition-all duration-300 flex items-center justify-center ${
-                !isButtonDisabled
-                  ? "bg-amber-500 hover:bg-amber-400 text-black transform hover:scale-[1.02] shadow-[0_0_30px_rgba(245,158,11,0.3)]"
-                  : "bg-white/[0.02] border border-white/[0.05] text-white/30 cursor-not-allowed backdrop-blur-sm"
-              }`}
-            >
-              {isLoading 
-                  ? "Memproses..." 
-                  : lockoutTime !== null 
-                    ? "Terkunci" 
-                    : "Masuk"}
+            <button type="submit" disabled={isOverrideButtonDisabled}
+              className="w-full py-4 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold transition-all flex justify-center items-center gap-2 disabled:opacity-50">
+              {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Verifikasi & Pindah Perangkat"}
             </button>
+            <button type="button" onClick={() => router.push("/login")} className="w-full py-2 text-sm text-white/30 hover:text-white transition-colors font-medium">Batal</button>
           </form>
 
-          <p className="text-center text-white/50 text-sm mt-8">
-            Belum memiliki akun? <Link href="/register" className="text-white hover:text-amber-500 transition-colors font-medium">Daftar sekarang</Link>
-          </p>
-        </>
+        ) : (
+
+          /* === TAMPILAN 3: FORM LOGIN (STANDAR) === */
+          <>
+            <div className="text-center mb-10">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-600 mb-6 shadow-[0_0_30px_rgba(37,99,235,0.4)]">
+                <img src="/favicon.ico" alt="Maeng Studio" className="w-8 h-8 object-contain" />
+              </div>
+              <h1 className="text-3xl font-light text-white tracking-wide">MAENG <span className="font-bold">STUDIO</span></h1>
+              <p className="text-zinc-400 mt-2 text-sm uppercase tracking-widest opacity-80">Dokumentasi & Audio System</p>
+            </div>
+
+            <form onSubmit={handleLogin} className="space-y-6">
+              {lockoutTime !== null && (
+                <div className="flex items-start text-red-400 text-sm bg-red-500/10 backdrop-blur-md p-4 rounded-xl border border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
+                  <Clock className="w-5 h-5 mr-3 flex-shrink-0 mt-0.5 animate-pulse" />
+                  <div>
+                    <p className="font-bold mb-1">Akses Terkunci Sementara</p>
+                    <p>Terlalu banyak percobaan gagal. Silakan coba lagi dalam <span className="font-bold text-white">{formatTime(lockoutTime)}</span></p>
+                  </div>
+                </div>
+              )}
+
+              {errorParam === "unauthorized" && (
+                <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm text-center mb-4">
+                  Sesi Anda telah berakhir. Silakan login kembali.
+                </div>
+              )}
+
+              <div>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-4 h-5 w-5 text-white/40" />
+                  <input type="email" placeholder="Alamat Email" disabled={lockoutTime !== null || isLoading} value={email} onChange={(e) => setEmail(e.target.value)} onBlur={handleBlurEmail} required
+                    className={`w-full bg-white/[0.03] backdrop-blur-md text-white placeholder-white/30 text-sm rounded-xl py-4 pl-12 pr-10 focus:outline-none transition-all disabled:opacity-40 disabled:cursor-not-allowed ${email && !isEmailValid ? 'border-red-500/50 focus:border-red-500/70 focus:bg-red-500/[0.02]' : 'border-white/[0.05] focus:border-blue-500/50 focus:bg-white/[0.06]'}`} />
+                  {email && isEmailValid && <div className="absolute right-4 top-4"><CheckCircle2 className="h-5 w-5 text-blue-500" /></div>}
+                </div>
+                {email && !isEmailValid && <p className="text-red-400/90 text-[10px] mt-1.5 px-1">Format email tidak valid.</p>}
+              </div>
+
+              <div className="relative">
+                <Lock className="absolute left-4 top-4 h-5 w-5 text-white/40" />
+                <input type={showPassword ? "text" : "password"} placeholder="Kata Sandi" disabled={lockoutTime !== null || isLoading} value={password} onChange={(e) => setPassword(e.target.value)} required
+                  className="w-full bg-white/[0.03] backdrop-blur-md border border-white/[0.05] text-white placeholder-white/30 text-sm rounded-xl py-4 pl-12 pr-12 focus:outline-none focus:border-blue-500/50 focus:bg-white/[0.06] transition-all disabled:opacity-40 disabled:cursor-not-allowed" />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} disabled={lockoutTime !== null || isLoading} tabIndex={-1} className="absolute right-4 top-4 text-white/40 hover:text-white transition-colors disabled:opacity-30">
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
+
+              <div className="flex items-center justify-between text-sm">
+                <Link href="/forgot-password" className="text-white/60 hover:text-blue-400 transition-colors ml-auto">Lupa sandi?</Link>
+              </div>
+
+              {isTurnstileConfigured ? (
+                <Turnstile ref={turnstileRef} siteKey={turnstileSiteKey} options={{ theme: "auto", size: "flexible" }} onWidgetLoad={() => setCaptchaState("ready")} onSuccess={(token) => { setTurnstileToken(token); setCaptchaState("ready"); }} onError={() => { setTurnstileToken(""); setCaptchaState("error"); showAlert("Turnstile gagal dimuat. Pastikan adblock dimatikan.", "error"); }} onExpire={() => { setTurnstileToken(""); setCaptchaState("loading"); turnstileRef.current?.reset(); }} />
+              ) : (
+                <div className="flex items-center gap-2 text-red-300/90 text-xs bg-red-500/10 backdrop-blur-md p-3 rounded-xl border border-red-500/20"><AlertCircle className="w-3.5 h-3.5" /><span>Captcha tidak aktif.</span></div>
+              )}
+
+              <button type="submit" disabled={isStandardButtonDisabled}
+                className={`w-full font-bold rounded-xl py-4 transition-all duration-300 flex items-center justify-center ${!isStandardButtonDisabled ? "bg-blue-600 hover:bg-blue-500 text-white transform hover:scale-[1.02] shadow-[0_0_20px_rgba(37,99,235,0.4)]" : "bg-white/[0.02] border border-white/[0.05] text-white/30 cursor-not-allowed backdrop-blur-sm"}`}>
+                {isLoading ? "Memproses..." : lockoutTime !== null ? "Terkunci" : "Masuk"}
+              </button>
+            </form>
+
+            <p className="text-center text-white/50 text-sm mt-8">
+              Belum memiliki akun? <Link href="/register" className="text-white hover:text-blue-400 transition-colors font-medium">Daftar sekarang</Link>
+            </p>
+          </>
         )}
       </div>
 
+      {/* --- KOMPONEN UI MODAL NOTIFIKASI --- */}
       {alertModal.isOpen && (
         <div className="fixed inset-0 z-[999999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-3xl p-6 space-y-4 text-center shadow-2xl animate-in zoom-in duration-200">
-            <div className={`mx-auto w-14 h-14 rounded-full flex items-center justify-center ${
-              alertModal.type === "success" ? "bg-emerald-500/20 text-emerald-400" :
-              alertModal.type === "error" ? "bg-red-500/20 text-red-400" :
-              "bg-amber-500/20 text-amber-400"
-            }`}>
+            <div className={`mx-auto w-14 h-14 rounded-full flex items-center justify-center ${alertModal.type === "success" ? "bg-emerald-500/20 text-emerald-400" : alertModal.type === "error" ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"}`}>
               {alertModal.type === "success" && <CheckCircle2 className="w-7 h-7" />}
               {alertModal.type === "error" && <AlertCircle className="w-7 h-7" />}
               {alertModal.type === "info" && <Info className="w-7 h-7" />}
@@ -360,15 +318,20 @@ export default function LoginPage() {
               {alertModal.type === "success" ? "Berhasil" : alertModal.type === "error" ? "Terjadi Kesalahan" : "Peringatan"}
             </h3>
             <p className="text-sm text-white/70 whitespace-pre-line">{alertModal.message}</p>
-            <button
-              onClick={() => setAlertModal({ ...alertModal, isOpen: false })}
-              className="w-full px-5 py-3 mt-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium transition-colors"
-            >
+            <button onClick={() => setAlertModal({ ...alertModal, isOpen: false })} className="w-full px-5 py-3 mt-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium transition-colors">
               Mengerti
             </button>
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#050505] flex items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}>
+      <LoginContent />
+    </Suspense>
   );
 }
