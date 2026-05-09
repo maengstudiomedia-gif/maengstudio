@@ -3,28 +3,33 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Lock, Mail, AlertCircle, CheckCircle2, Clock, Eye, EyeOff, ShieldCheck, Loader2 } from "lucide-react";
+import { Lock, Mail, AlertCircle, CheckCircle2, Clock, Eye, EyeOff, ShieldCheck, Loader2, Info } from "lucide-react";
 import { Turnstile, TurnstileInstance } from "@marsidev/react-turnstile"; 
 import { secureLoginAction, checkEmailStatusAction, checkIpStatusAction } from "@/app/actions/auth";
 
 export default function LoginPage() {
-  const router = useRouter(); // Untuk pindah halaman
+  const router = useRouter();
   const turnstileSiteKey = (process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY || "").trim();
   const isTurnstileConfigured = turnstileSiteKey.length > 0;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
   const [lockoutTime, setLockoutTime] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingLock, setIsCheckingLock] = useState(true); 
-  const [securityInfo, setSecurityInfo] = useState("");
   const [captchaState, setCaptchaState] = useState<"loading" | "ready" | "error">("loading");
 
-  // STATE BARU: Untuk Intip Sandi & Tampilan Sukses
+  // STATE: Intip Sandi & Tampilan Sukses
   const [showPassword, setShowPassword] = useState(false);
-  const [isSuccess, setIsSuccess] = useState(false); // Tampilan Sukses
+  const [isSuccess, setIsSuccess] = useState(false); 
   const redirectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const redirectFallbackRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // --- STATE UNTUK MODAL NOTIFIKASI PROFESIONAL ---
+  const [alertModal, setAlertModal] = useState<{ isOpen: boolean; message: string; type: "success" | "error" | "info" }>({ isOpen: false, message: "", type: "info" });
+
+  const showAlert = (message: string, type: "success" | "error" | "info" = "info") => {
+    setAlertModal({ isOpen: true, message, type });
+  };
 
   // --- REFERENSI TURNSTILE UNTUK RESET OTOMATIS ---
   const turnstileRef = useRef<TurnstileInstance | null>(null);
@@ -35,7 +40,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (!isTurnstileConfigured) {
       setCaptchaState("error");
-      setError("Captcha belum dikonfigurasi di server. Hubungi admin untuk melengkapi NEXT_PUBLIC_TURNSTILE_SITE_KEY.");
+      showAlert("Captcha belum dikonfigurasi di server. Hubungi admin untuk melengkapi NEXT_PUBLIC_TURNSTILE_SITE_KEY.", "error");
     }
   }, [isTurnstileConfigured]);
 
@@ -73,8 +78,8 @@ export default function LoginPage() {
         }
       } catch {
         if (!isMounted) return;
-        // UI tetap bisa dipakai walau pre-check lambat, validasi keras tetap dijaga di server action.
-        setSecurityInfo("Pengecekan awal sedang lambat. Anda tetap bisa lanjut login dengan verifikasi captcha.");
+        // Hanya memunculkan modal info jika pengecekan gagal/lambat
+        showAlert("Pengecekan keamanan awal sedang lambat. Anda tetap bisa lanjut login dengan verifikasi captcha.", "info");
       } finally {
         if (!isMounted) return;
         setIsCheckingLock(false);
@@ -97,7 +102,6 @@ export default function LoginPage() {
       return () => clearInterval(timer);
     } else if (lockoutTime === 0) {
       setLockoutTime(null);
-      setError("");
     }
   }, [lockoutTime]);
 
@@ -113,10 +117,9 @@ export default function LoginPage() {
     
     if (status.isLocked && status.lockoutTime) {
       setLockoutTime(status.lockoutTime);
+      showAlert("Akun ini sedang terkunci sementara karena terlalu banyak percobaan gagal.", "error");
     } else if (status.attemptsLeft && status.attemptsLeft < 3) {
-      setError(`Peringatan: Tersisa ${status.attemptsLeft} percobaan login untuk email ini.`);
-    } else {
-      setError("");
+      showAlert(`Peringatan: Tersisa ${status.attemptsLeft} percobaan login untuk email ini sebelum dikunci.`, "info");
     }
   };
 
@@ -127,8 +130,6 @@ export default function LoginPage() {
     if (lockoutTime !== null || isLoading) return; 
     
     setIsLoading(true);
-    setError("");
-    setSecurityInfo("");
 
     const formData = new FormData();
     formData.append("email", email);
@@ -141,8 +142,10 @@ export default function LoginPage() {
       if (!result.success) {
         if (result.isLocked) {
           setLockoutTime(result.lockoutTime!);
+          showAlert("Akses Terkunci! Terlalu banyak percobaan gagal.", "error");
         } else {
-          setError(result.message ?? "Login gagal. Silakan coba lagi.");
+          // Gantikan Alert Bawaan/Inline dengan Modal
+          showAlert(result.message ?? "Login gagal. Silakan periksa kembali email dan password Anda.", "error");
         }
         
         // --- CRITICAL FIX: RESET TURNSTILE JIKA GAGAL ---
@@ -154,7 +157,6 @@ export default function LoginPage() {
         // --- LOGIKA BARU: JIKA SUKSES ---
         setIsSuccess(true); // Ganti tampilan jadi layar sukses
         setIsLoading(false);
-        setError("");
         
         const targetPath = result.redirectTo || (result.role === "admin" ? "/admin/dashboard" : "/client/profile");
 
@@ -170,8 +172,8 @@ export default function LoginPage() {
         }, 3000);
       }
     } catch (err) {
-      // Menangani error jaringan yang tidak terduga
-      setError("Terjadi kesalahan jaringan. Silakan coba lagi.");
+      // Menangani error jaringan menggunakan Modal
+      showAlert("Terjadi kesalahan jaringan. Silakan coba lagi.", "error");
       setTurnstileToken(""); 
       turnstileRef.current?.reset();
       setIsLoading(false);
@@ -179,8 +181,6 @@ export default function LoginPage() {
   };
 
   const isEmailValid = validateEmail(email);
-  
-  // Tombol lumpuh jika ada yang belum valid ATAU jika form sedang memproses request (isLoading)
   const isButtonDisabled = !email || !password || !isEmailValid || lockoutTime !== null || isLoading || !turnstileToken || !isTurnstileConfigured;
 
   return (
@@ -218,7 +218,7 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleLogin} className="space-y-6">
-            {lockoutTime !== null ? (
+            {lockoutTime !== null && (
               <div className="flex items-start text-red-400 text-sm bg-red-500/10 backdrop-blur-md p-4 rounded-xl border border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
                 <Clock className="w-5 h-5 mr-3 flex-shrink-0 mt-0.5 animate-pulse" />
                 <div>
@@ -226,17 +226,7 @@ export default function LoginPage() {
                   <p>Terlalu banyak percobaan gagal. Silakan coba lagi dalam <span className="font-bold text-white">{formatTime(lockoutTime)}</span></p>
                 </div>
               </div>
-            ) : error ? (
-              <div className="flex items-center text-amber-400 text-sm bg-amber-500/10 backdrop-blur-md p-3 rounded-xl border border-amber-500/20">
-                <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
-                {error}
-              </div>
-            ) : securityInfo ? (
-              <div className="flex items-center text-blue-300 text-sm bg-blue-500/10 backdrop-blur-md p-3 rounded-xl border border-blue-500/20">
-                <AlertCircle className="w-4 h-4 mr-2 flex-shrink-0" />
-                {securityInfo}
-              </div>
-            ) : null}
+            )}
 
             {/* Input Email Glass */}
             <div>
@@ -252,10 +242,7 @@ export default function LoginPage() {
                       : 'border-white/[0.05] focus:border-amber-500/50 focus:bg-white/[0.06]'
                   }`}
                   value={email}
-                  onChange={(e) => {
-                    setEmail(e.target.value);
-                    if (error && !error.includes("Tersisa")) setError(""); 
-                  }}
+                  onChange={(e) => setEmail(e.target.value)}
                   onBlur={handleBlurEmail}
                   required
                 />
@@ -315,7 +302,7 @@ export default function LoginPage() {
                 onError={() => {
                   setTurnstileToken("");
                   setCaptchaState("error");
-                  setError("Turnstile gagal dimuat. Pastikan domain deploy sudah terdaftar di Cloudflare Turnstile dan adblock dimatikan.");
+                  showAlert("Turnstile gagal dimuat. Pastikan domain deploy sudah terdaftar di Cloudflare Turnstile dan adblock dimatikan.", "error");
                 }}
                 onExpire={() => {
                   // Jika user kelamaan diam dan token kedaluwarsa, paksa minta ulang ke Cloudflare
@@ -349,12 +336,6 @@ export default function LoginPage() {
                   <span>Verifikasi keamanan siap. Anda bisa login.</span>
                 </div>
               )}
-              {captchaState === "error" && (
-                <div className="flex items-center gap-2 text-red-300/90">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>Captcha gagal dimuat. Coba refresh halaman.</span>
-                </div>
-              )}
             </div>
 
             {/* Glass Button Dinamis */}
@@ -381,6 +362,33 @@ export default function LoginPage() {
         </>
         )}
       </div>
+
+      {/* --- KOMPONEN UI MODAL NOTIFIKASI --- */}
+      {alertModal.isOpen && (
+        <div className="fixed inset-0 z-[999999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-3xl p-6 space-y-4 text-center shadow-2xl animate-in zoom-in duration-200">
+            <div className={`mx-auto w-14 h-14 rounded-full flex items-center justify-center ${
+              alertModal.type === "success" ? "bg-emerald-500/20 text-emerald-400" :
+              alertModal.type === "error" ? "bg-red-500/20 text-red-400" :
+              "bg-amber-500/20 text-amber-400"
+            }`}>
+              {alertModal.type === "success" && <CheckCircle2 className="w-7 h-7" />}
+              {alertModal.type === "error" && <AlertCircle className="w-7 h-7" />}
+              {alertModal.type === "info" && <Info className="w-7 h-7" />}
+            </div>
+            <h3 className="text-xl font-bold text-white">
+              {alertModal.type === "success" ? "Berhasil" : alertModal.type === "error" ? "Terjadi Kesalahan" : "Peringatan"}
+            </h3>
+            <p className="text-sm text-white/70 whitespace-pre-line">{alertModal.message}</p>
+            <button
+              onClick={() => setAlertModal({ ...alertModal, isOpen: false })}
+              className="w-full px-5 py-3 mt-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium transition-colors"
+            >
+              Mengerti
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
