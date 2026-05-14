@@ -19,6 +19,12 @@ export function formatRupiah(value: number) {
   }).format(Number(value || 0));
 }
 
+/** Rupiah hanya ASCII (contoh Rp1.700.000) — untuk ESC/POS: hindari NBSP/narrow space setelah "Rp" yang jadi karakter rusak di printer. */
+export function formatRupiahAscii(value: number): string {
+  const n = Math.round(Number(value || 0));
+  return `Rp${n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
+}
+
 export function parseEventDetails(eventDetails: unknown): EventDetail[] {
   const normalize = (raw: EventDetail): EventDetail => {
     const rawDate = String(raw.date || "");

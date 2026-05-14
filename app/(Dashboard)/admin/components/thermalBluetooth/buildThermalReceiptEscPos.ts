@@ -1,5 +1,5 @@
 import type { BookingRow } from "../types";
-import { formatRupiah, parseEventDetails } from "../utils";
+import { formatRupiahAscii, parseEventDetails } from "../utils";
 import { buildPackageLineItems } from "../bookingReceipt/buildPackageLineItems";
 import type { ReceiptKind } from "../bookingReceipt/receiptTypes";
 import { buildEscPosBytes } from "./escposBytes";
@@ -20,12 +20,20 @@ export function buildThermalReceiptTextLines(row: BookingRow, type: ReceiptKind,
   const W = 32;
   const rule = "-".repeat(W);
 
+  const centerInWidth = (text: string, width: number) => {
+    const t = String(text);
+    if (t.length >= width) return t.slice(0, width);
+    const pad = width - t.length;
+    const left = Math.floor(pad / 2);
+    return `${" ".repeat(left)}${t}${" ".repeat(pad - left)}`;
+  };
+
   lines.push("      MAENG STUDIO");
   lines.push("   Jasa Audio & Dokumentasi");
   lines.push("");
   lines.push(rule);
   lines.push(isLunas ? "      NOTA PELUNASAN" : "    NOTA PEMBAYARAN DP");
-  lines.push(String(row.invoice_number || "-"));
+  lines.push(centerInWidth(String(row.invoice_number || "-"), W));
   lines.push(rule);
   lines.push(`Tgl: ${new Date().toLocaleDateString("id-ID")}`);
   lines.push(`Klien: ${String(row.client_name || "-")}`);
@@ -34,7 +42,7 @@ export function buildThermalReceiptTextLines(row: BookingRow, type: ReceiptKind,
   lines.push("RINCIAN PAKET:");
   for (const item of buildPackageLineItems(row)) {
     const left = item.label.slice(0, 22);
-    const right = formatRupiah(item.amount);
+    const right = formatRupiahAscii(item.amount);
     lines.push(`${left}`);
     lines.push(`${"".padStart(Math.max(0, W - right.length), " ")}${right}`);
   }
@@ -48,15 +56,15 @@ export function buildThermalReceiptTextLines(row: BookingRow, type: ReceiptKind,
   }
   lines.push(rule);
   if (isLunas) {
-    lines.push(`Total tagihan : ${formatRupiah(total)}`);
-    lines.push(`DP terbayar     : ${formatRupiah(dpPaidDisplay)}`);
-    lines.push(`Pelunasan       : ${formatRupiah(pelunasanAmount)}`);
-    lines.push(`Total terbayar  : ${formatRupiah(paidCurrent)}`);
+    lines.push(`Total tagihan : ${formatRupiahAscii(total)}`);
+    lines.push(`DP terbayar     : ${formatRupiahAscii(dpPaidDisplay)}`);
+    lines.push(`Pelunasan       : ${formatRupiahAscii(pelunasanAmount)}`);
+    lines.push(`Total terbayar  : ${formatRupiahAscii(paidCurrent)}`);
   } else {
-    lines.push(`Total tagihan   : ${formatRupiah(total)}`);
-    lines.push(`Pembayaran DP   : ${formatRupiah(paidForDpReceipt)}`);
-    lines.push(`Terbayar (kum.) : ${formatRupiah(Math.max(paidCurrent, paidForDpReceipt))}`);
-    lines.push(`Sisa            : ${formatRupiah(Math.max(total - paidForDpReceipt, 0))}`);
+    lines.push(`Total tagihan   : ${formatRupiahAscii(total)}`);
+    lines.push(`Pembayaran DP   : ${formatRupiahAscii(paidForDpReceipt)}`);
+    lines.push(`Terbayar (kum.) : ${formatRupiahAscii(Math.max(paidCurrent, paidForDpReceipt))}`);
+    lines.push(`Sisa            : ${formatRupiahAscii(Math.max(total - paidForDpReceipt, 0))}`);
   }
   lines.push(rule);
   lines.push(isLunas ? "Tagihan lunas. Terima kasih." : "Sisa wajib lunas H-1 acara.");

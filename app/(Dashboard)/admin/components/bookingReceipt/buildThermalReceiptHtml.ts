@@ -1,13 +1,7 @@
 import type { BookingRow } from "../types";
-import { escapeHtml, parseEventDetails } from "../utils";
+import { escapeHtml, formatRupiahAscii, parseEventDetails } from "../utils";
 import { buildPackageLineItems } from "./buildPackageLineItems";
 import type { ReceiptKind } from "./receiptTypes";
-
-// HELPER BARU: Menulis "Rp" TANPA SPASI (contoh: Rp1.500.000) 
-// Ini mematikan kemungkinan munculnya spasi aneh ┬á di nominal harga
-const safeFormatRupiah = (val: number) => {
-  return "Rp" + Math.round(val).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-};
 
 export function buildThermalReceiptHtml(
   row: BookingRow & { dp_amount?: number },
@@ -40,7 +34,7 @@ export function buildThermalReceiptHtml(
       (line) =>
         `<div class="pkg-row">
            <div class="pkg-name">${escapeHtml(line.label)}</div>
-           <div class="pkg-price">${escapeHtml(safeFormatRupiah(line.amount))}</div>
+           <div class="pkg-price">${escapeHtml(formatRupiahAscii(line.amount))}</div>
          </div>`
     )
     .join("");
@@ -52,14 +46,14 @@ export function buildThermalReceiptHtml(
 
   const paymentBlock = isLunas
     ? `
-    <div class="total-row"><span>Total Tagihan</span><span>: ${escapeHtml(safeFormatRupiah(total))}</span></div>
-    <div class="total-row"><span>Sdh Terbayar</span><span>: ${escapeHtml(safeFormatRupiah(paidCurrent))}</span></div>
-    <div class="total-row bold"><span>Pelunasan</span><span>: ${escapeHtml(safeFormatRupiah(pelunasanAmount))}</span></div>
+    <div class="total-row"><span>Total Tagihan</span><span>: ${escapeHtml(formatRupiahAscii(total))}</span></div>
+    <div class="total-row"><span>Sdh Terbayar</span><span>: ${escapeHtml(formatRupiahAscii(paidCurrent))}</span></div>
+    <div class="total-row bold"><span>Pelunasan</span><span>: ${escapeHtml(formatRupiahAscii(pelunasanAmount))}</span></div>
     `
     : `
-    <div class="total-row"><span>Total Tagihan</span><span>: ${escapeHtml(safeFormatRupiah(total))}</span></div>
-    <div class="total-row"><span>Terbayar (DP)</span><span>: ${escapeHtml(safeFormatRupiah(paidForReceipt))}</span></div>
-    <div class="total-row bold"><span>Sisa Tagihan</span><span>: ${escapeHtml(safeFormatRupiah(Math.max(total - paidForReceipt, 0)))}</span></div>
+    <div class="total-row"><span>Total Tagihan</span><span>: ${escapeHtml(formatRupiahAscii(total))}</span></div>
+    <div class="total-row"><span>Terbayar (DP)</span><span>: ${escapeHtml(formatRupiahAscii(paidForReceipt))}</span></div>
+    <div class="total-row bold"><span>Sisa Tagihan</span><span>: ${escapeHtml(formatRupiahAscii(Math.max(total - paidForReceipt, 0)))}</span></div>
     `;
 
   // Simpan HTML ke variabel dulu
