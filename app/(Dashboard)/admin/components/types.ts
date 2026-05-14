@@ -33,6 +33,11 @@ export type BookingRow = {
   status?: string;
   invoice?: InvoiceRow | null;
   custom_event_type?: string;
+  /** Diisi dari notes.addon_package_ids + join ke katalog */
+  addon_package_ids?: string[];
+  addon_packages?: Array<{ id: string; name: string; type: string; price: number }>;
+  /** Nilai DP yang tercatat (notes.dp_paid_amount) untuk struk pelunasan */
+  dp_paid_amount?: number;
   process?: {
     stage?: "awaiting_settlement" | "edit_process" | "print_process" | "completed" | "picked_up";
     paidOffAt?: string;

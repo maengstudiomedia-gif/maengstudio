@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { 
   supabaseAdmin, getErrorMessage, parseEventDetails, parseProcessMeta, 
-  mergeProcessMetaAsNotes, STORAGE_BUCKET, BookingProcessMeta 
+  mergeProcessMetaAsNotes, mergeBookingNotesPatch, STORAGE_BUCKET, BookingProcessMeta 
 } from "./utils";
 
 export async function updateBookingPaymentAction(bookingId: string, paymentType: "dp" | "lunas", amount?: number) {
@@ -28,6 +28,27 @@ export async function updateBookingPaymentAction(bookingId: string, paymentType:
     } else if (paymentType === "dp") {
       nextPaid = Number(amount || 0);
       nextStatus = nextPaid >= totalAmount ? "paid" : "unpaid";
+    }
+
+    let notesForProcess: unknown = booking.notes;
+
+    if (paymentType === "dp") {
+      notesForProcess = mergeBookingNotesPatch(notesForProcess, { dp_paid_amount: nextPaid });
+    }
+
+    if (paymentType === "lunas") {
+      const prevPaid = Number(invoice.paid_amount || 0);
+      let existingDp: number | undefined;
+      try {
+        const n = typeof notesForProcess === "string" ? JSON.parse(notesForProcess) : notesForProcess;
+        if (n && typeof n === "object" && typeof (n as { dp_paid_amount?: unknown }).dp_paid_amount === "number") {
+          existingDp = (n as { dp_paid_amount: number }).dp_paid_amount;
+        }
+      } catch {
+        /* abaikan */
+      }
+      const dpRecorded = typeof existingDp === "number" && !Number.isNaN(existingDp) ? existingDp : prevPaid;
+      notesForProcess = mergeBookingNotesPatch(notesForProcess, { dp_paid_amount: dpRecorded });
     }
 
     const eventDates = parseEventDetails(booking.event_details)
@@ -55,15 +76,18 @@ export async function updateBookingPaymentAction(bookingId: string, paymentType:
     }
 
     if (nextStatus === "paid") {
-      const currentProcess = parseProcessMeta(booking.notes);
+      const currentProcess = parseProcessMeta(notesForProcess);
       const nextProcess: BookingProcessMeta = {
         ...currentProcess,
         stage: currentProcess.stage === "picked_up" ? "picked_up" : currentProcess.stage === "completed" ? "completed" : "awaiting_settlement",
         paidOffAt: currentProcess.paidOffAt || new Date().toISOString(),
       };
+      const finalNotes = mergeProcessMetaAsNotes(notesForProcess, nextProcess);
       await supabaseAdmin.from("bookings").update({
-        status: "locked", notes: mergeProcessMetaAsNotes(booking.notes, nextProcess),
+        status: "locked", notes: finalNotes,
       }).eq("id", booking.id);
+    } else if (paymentType === "dp" || paymentType === "lunas") {
+      await supabaseAdmin.from("bookings").update({ notes: notesForProcess as string }).eq("id", booking.id);
     }
 
     revalidatePath("/admin/bookings");
@@ -98,7 +122,7 @@ export async function updateBookingProcessAction(
       if (currentProcess.stage !== "edit_process") return { success: false, error: "Harus diedit dulu." };
       nextProcess = { ...currentProcess, stage: "print_process", printStartedAt: now };
     } else if (actionType === "finish") {
-      if (currentProcess.stage !== "print_process") return { success: false, error: "Harus dicetak dulu." };
+      if (currentProcess.stage !== "print_process") return { success: false, error: "Harus dalam tahap percetakan terlebih dahulu." };
       nextProcess = { ...currentProcess, stage: "completed", completedAt: now };
       nextStatus = "completed";
     } else if (actionType === "picked_up") {

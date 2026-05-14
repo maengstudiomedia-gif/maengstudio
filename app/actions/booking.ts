@@ -2,6 +2,8 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { extractDateKeysFromEventDetails } from "@/lib/bookingCalendar/extractDateKeysFromEventDetails";
+import { validateBookingEventDatesAction, revalidateBookingCalendarPaths } from "@/app/actions/bookingCalendarActions";
 
 // Helper untuk inisialisasi Supabase di sisi Server (Memastikan RLS berjalan aman)
 async function getSupabase() {
@@ -56,6 +58,12 @@ export async function createNewBookingAction(payload: any) {
      return { success: false, message: "Minimal harus ada satu rangkaian acara." };
   }
 
+  const dateKeys = extractDateKeysFromEventDetails(events);
+  const cap = await validateBookingEventDatesAction({ dateKeys, excludeBookingId: null });
+  if (!cap.success) {
+    return { success: false, message: cap.error || "Tanggal pilihan sudah penuh (maks. 2 pesanan per hari). Silakan pilih tanggal lain." };
+  }
+
   // -- A. Masukkan Data Pemesanan --
   const { data: booking, error: bookingError } = await supabase
     .from('bookings')
@@ -89,5 +97,6 @@ export async function createNewBookingAction(payload: any) {
 
   if (invoiceError) return { success: false, message: "Gagal membuat tagihan: " + invoiceError.message };
 
+  revalidateBookingCalendarPaths();
   return { success: true, message: "Pesanan dan Invois berhasil dibuat!" };
 }

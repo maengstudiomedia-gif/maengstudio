@@ -95,7 +95,7 @@ export default function PaymentModal({ target, defaultAmount, onClose, onSave }:
             disabled={isSaving} 
             className={`px-5 py-2.5 rounded-xl text-black font-bold flex items-center gap-2 transition-colors ${needsConfirm ? "bg-red-500 hover:bg-red-400" : "bg-amber-500 hover:bg-amber-400"}`}
           >
-            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : needsConfirm ? "Tetap Simpan" : "Simpan & Cetak"}
+            {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : needsConfirm ? "Tetap Simpan" : "Simpan DP"}
           </button>
         </div>
       </div>

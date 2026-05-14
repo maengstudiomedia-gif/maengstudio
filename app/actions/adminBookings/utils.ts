@@ -27,6 +27,8 @@ export type BookingPayload = {
   groom_name?: string;
   event_details: EventDetail[];
   total_price: number;
+  /** ID paket tambahan (audio, dll.) disimpan di notes JSON */
+  addon_package_ids?: string[];
 };
 
 export type UpdateBookingPayload = {
@@ -106,4 +108,18 @@ export function mergeProcessMetaAsNotes(existingNotes: unknown, process: Booking
     base = existingNotes as Record<string, unknown>;
   }
   return JSON.stringify({ ...base, process });
+}
+
+/** Gabung field top-level notes (addon, dp_paid_amount, dll.) tanpa menghapus process */
+export function mergeBookingNotesPatch(existingNotes: unknown, patch: Record<string, unknown>): string {
+  let base: Record<string, unknown> = {};
+  if (existingNotes && typeof existingNotes === "string") {
+    try {
+      const parsed = JSON.parse(existingNotes) as unknown;
+      if (parsed && typeof parsed === "object") base = parsed as Record<string, unknown>;
+    } catch {}
+  } else if (existingNotes && typeof existingNotes === "object") {
+    base = existingNotes as Record<string, unknown>;
+  }
+  return JSON.stringify({ ...base, ...patch });
 }

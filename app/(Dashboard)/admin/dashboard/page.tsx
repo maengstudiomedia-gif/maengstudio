@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ShieldAlert, Search, Loader2, X, ReceiptText, ChevronRight } from "lucide-react";
-import { getAdminBookingsAction } from "@/app/actions/adminBookings"; // Pastikan path ini sesuai
+import { getAdminBookingsAction } from "@/app/actions/adminBookings";
+import AdminBookingCalendarPanel from "@/app/components/bookingCalendar/AdminBookingCalendarPanel";
 
 // Fungsi Helper Format Rupiah
 function formatRupiah(value: number) {
@@ -20,6 +21,7 @@ type DashboardBooking = {
   client_name: string;
   package_name: string;
   created_at: string;
+  event_details?: unknown;
   invoice?: {
     total_amount: number;
     paid_amount: number;
@@ -152,6 +154,14 @@ export default function AdminDashboardPage() {
         </div>
       ) : (
         <>
+          <AdminBookingCalendarPanel
+            bookings={bookings.map((b) => ({
+              id: b.id,
+              client_name: b.client_name,
+              event_details: b.event_details,
+            }))}
+          />
+
           {/* KARTU PENDAPATAN (Non-Clickable) */}
           <div className="mb-6">
             <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-900/10 border border-emerald-500/20 rounded-3xl p-6 md:p-8">

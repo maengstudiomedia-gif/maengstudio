@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { getPackagesAction } from "@/app/actions/packages";
 import { createNewBookingAction } from "@/app/actions/booking";
+import EventDateAvailabilityHint from "@/app/components/bookingCalendar/EventDateAvailabilityHint";
 
 interface TabNewBookingProps {
   userId: string;
@@ -111,7 +112,16 @@ export default function TabNewBooking({ userId, onBack }: TabNewBookingProps) {
       };
 
       // Memanggil Server Action untuk insert ke Database
-      await createNewBookingAction(payload as any);
+      const result = await createNewBookingAction(payload as any);
+      if (!result.success) {
+        setModal({
+          isOpen: true,
+          type: "error",
+          title: "Pesanan tidak dapat dibuat",
+          message: result.message || "Silakan periksa kembali data atau pilih tanggal lain.",
+        });
+        return;
+      }
 
       // Tampilkan Modal Sukses jika berhasil
       setModal({
@@ -270,6 +280,8 @@ export default function TabNewBooking({ userId, onBack }: TabNewBookingProps) {
                 </button>
               )}
             </div>
+
+            <EventDateAvailabilityHint events={events} />
 
             {events.map((event, index) => (
               <div key={event.id} className="relative p-6 bg-white/[0.01] border border-white/[0.05] rounded-2xl space-y-6 shadow-sm">

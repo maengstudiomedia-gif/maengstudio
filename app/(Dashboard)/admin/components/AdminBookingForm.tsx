@@ -4,7 +4,10 @@ import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { X, Save, Plus, Trash2, Loader2, Calendar, MapPin, Clock, CheckCircle2, Package as PackageIcon } from "lucide-react";
 import { generateInvoiceNumberAction, createAdminBookingAction } from "@/app/actions/adminBookings";
+import { extractDateKeysFromEventDetails } from "@/lib/bookingCalendar/extractDateKeysFromEventDetails";
+import { validateBookingEventDatesAction } from "@/app/actions/bookingCalendarActions";
 import AlertModal from "./AlertModal";
+import EventDateAvailabilityHint from "@/app/components/bookingCalendar/EventDateAvailabilityHint";
 
 interface AdminBookingFormProps {
   userId: string;
@@ -103,6 +106,19 @@ export default function AdminBookingForm({ userId, selectedPackage, allPackages 
     };
 
     try {
+      const dateKeys = extractDateKeysFromEventDetails(events);
+      const cap = await validateBookingEventDatesAction({ dateKeys, excludeBookingId: null });
+      if (!cap.success) {
+        setAlertState({
+          isOpen: true,
+          title: "Jadwal tidak tersedia",
+          message: cap.error || "Tanggal penuh.",
+          variant: "error",
+        });
+        setIsLoading(false);
+        return;
+      }
+
       const result = await createAdminBookingAction(payload);
       if (result.success) {
         onSuccess();
@@ -245,6 +261,7 @@ export default function AdminBookingForm({ userId, selectedPackage, allPackages 
                   <Plus className="w-3.5 h-3.5 mr-2" /> TAMBAH HARI
                 </button>
               </div>
+              <EventDateAvailabilityHint events={events} />
               {events.map((event, index) => (
                 <div key={event.id} className="p-6 bg-white/[0.01] border border-white/5 rounded-[2rem] grid grid-cols-1 md:grid-cols-3 gap-6 relative group">
                   {events.length > 1 && (

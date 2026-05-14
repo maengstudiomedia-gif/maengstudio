@@ -18,9 +18,9 @@ import BookingTable from "./BookingTable";
 import EditBookingModal from "./EditBookingModal";
 import PaymentModal from "./PaymentModal";
 import ProcessPickupModal from "./ProcessPickupModal";
+import ThermalReceiptPrintModal from "./ThermalReceiptPrintModal";
 
-// Impor utils & types
-import { buildThermalReceiptHtml, formatRupiah } from "./utils"; 
+import { formatRupiah } from "./utils";
 import type { BookingRow } from "./types";
 
 export default function AdminBookingsTable() {
@@ -31,7 +31,8 @@ export default function AdminBookingsTable() {
   // State untuk mengontrol Modal Form yang sedang terbuka
   const [editing, setEditing] = useState<BookingRow | null>(null);
   const [pickupTarget, setPickupTarget] = useState<BookingRow | null>(null);
-  const [dpPaymentTarget, setDpPaymentTarget] = useState<{row: BookingRow, defaultAmount: string} | null>(null);
+  const [dpPaymentTarget, setDpPaymentTarget] = useState<{ row: BookingRow; defaultAmount: string } | null>(null);
+  const [thermalPrintRow, setThermalPrintRow] = useState<BookingRow | null>(null);
 
   // --- STATE UNTUK MODAL NOTIFIKASI & KONFIRMASI PROFESIONAL ---
   const [alertModal, setAlertModal] = useState<{ isOpen: boolean; message: string; type: "success" | "error" | "info" }>({ isOpen: false, message: "", type: "info" });
@@ -68,7 +69,8 @@ export default function AdminBookingsTable() {
       const client = String(row.client_name || "").toLowerCase();
       const phone = String(row.client_phone || "").toLowerCase();
       const pkg = String(row.package_name || "").toLowerCase();
-      return invoice.includes(q) || client.includes(q) || phone.includes(q) || pkg.includes(q);
+      const addonHit = (row.addon_packages || []).some((a) => String(a.name || "").toLowerCase().includes(q));
+      return invoice.includes(q) || client.includes(q) || phone.includes(q) || pkg.includes(q) || addonHit;
     });
   }, [bookings, keyword]);
 
@@ -83,22 +85,6 @@ export default function AdminBookingsTable() {
         showAlert("Gagal menghapus: " + result.error, "error");
       }
     });
-  }
-
-  // Handler Print
-  function printReceipt(row: BookingRow, type: "dp" | "lunas", customPaidValue?: number) {
-    const receiptWindow = window.open("", "_blank", "width=420,height=760");
-    if (!receiptWindow) {
-      showAlert("Popup diblokir browser. Izinkan popup untuk mencetak nota.", "error");
-      return;
-    }
-    receiptWindow.document.open();
-    receiptWindow.document.write(buildThermalReceiptHtml(row, type, customPaidValue));
-    receiptWindow.document.close();
-    receiptWindow.focus();
-    setTimeout(() => {
-      receiptWindow.print();
-    }, 250);
   }
 
   // Render Utama
@@ -162,12 +148,12 @@ export default function AdminBookingsTable() {
               if (res.success) fetchBookings();
               else showAlert("Gagal update proses: " + res.error, "error");
             }}
-            onStartPrint={async (id, row) => {
-              printReceipt(row, "dp");
+            onEnterPrintStage={async (id) => {
               const res = await updateBookingProcessAction(id, "start_print");
               if (res.success) fetchBookings();
+              else showAlert("Gagal memasuki tahap percetakan: " + res.error, "error");
             }}
-            onPrintLunas={(row) => printReceipt(row, "lunas")}
+            onOpenThermalPrint={(row) => setThermalPrintRow({ ...row })}
             onFinish={async (id) => {
               const res = await updateBookingProcessAction(id, "finish");
               if (res.success) fetchBookings();
@@ -223,14 +209,21 @@ export default function AdminBookingsTable() {
           onSave={async (amount) => {
             const res = await updateBookingPaymentAction(dpPaymentTarget.row.id, "dp", amount);
             if (res.success) {
-               printReceipt(dpPaymentTarget.row, "dp", amount);
                setDpPaymentTarget(null);
                fetchBookings();
-               showAlert("Pembayaran DP berhasil disimpan!", "success");
+               showAlert("Pembayaran DP berhasil disimpan! Gunakan kolom Cetak 80mm untuk struk.", "success");
             } else {
                showAlert("Gagal update pembayaran: " + res.error, "error");
             }
           }}
+        />
+      )}
+
+      {thermalPrintRow && (
+        <ThermalReceiptPrintModal
+          row={thermalPrintRow}
+          onClose={() => setThermalPrintRow(null)}
+          onNotify={(message, type) => showAlert(message, type)}
         />
       )}
 

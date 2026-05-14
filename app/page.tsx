@@ -13,6 +13,7 @@ import {
   Image as ImageIcon
 } from "lucide-react";
 import { getPublicPackages, getClientShowcase } from "@/app/actions/publicActions";
+import PublicBookingCalendarSection from "@/app/components/bookingCalendar/PublicBookingCalendarSection";
 
 // Fungsi Helper Format Rupiah
 function formatRupiah(value: number) {
@@ -55,6 +56,7 @@ export default function LandingPage() {
           </div>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-medium text-white/60">
+            <a href="#kalender" className="hover:text-white transition-colors">Kalender</a>
             <a href="#layanan" className="hover:text-white transition-colors">Layanan</a>
             <a href="#klien" className="hover:text-white transition-colors">Klien</a>
             <a href="#kontak" className="hover:text-white transition-colors">Kontak</a>
@@ -100,6 +102,11 @@ export default function LandingPage() {
             </a>
           </div>
         </div>
+      </section>
+
+      {/* --- KALENDER KETERSEDIAAN --- */}
+      <section id="kalender" className="py-24 px-6 max-w-4xl mx-auto">
+        <PublicBookingCalendarSection />
       </section>
 
       {/* --- SECTION PAKET LAYANAN DENGAN GAMBAR --- */}
@@ -250,6 +257,7 @@ export default function LandingPage() {
           <div className="space-y-6">
             <h4 className="font-bold text-white uppercase tracking-widest text-xs">Tautan Cepat</h4>
             <ul className="space-y-3 text-sm text-white/40">
+              <li><a href="#kalender" className="hover:text-blue-400 transition-colors">Kalender ketersediaan</a></li>
               <li><Link href="/cek-nota" className="hover:text-blue-400 transition-colors">Cek Status Pesanan</Link></li>
               <li><Link href="/login" className="hover:text-blue-400 transition-colors">Portal Admin</Link></li>
               <li><a href="#layanan" className="hover:text-blue-400 transition-colors">Paket Dokumentasi</a></li>
