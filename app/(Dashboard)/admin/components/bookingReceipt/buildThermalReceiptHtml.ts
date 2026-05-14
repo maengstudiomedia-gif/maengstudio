@@ -3,23 +3,21 @@ import { escapeHtml, parseEventDetails } from "../utils";
 import { buildPackageLineItems } from "./buildPackageLineItems";
 import type { ReceiptKind } from "./receiptTypes";
 
-// Helper BARU yang 100% aman dari karakter aneh (non-breaking space)
+// HELPER BARU: Menulis "Rp" TANPA SPASI (contoh: Rp1.500.000) 
+// Ini mematikan kemungkinan munculnya spasi aneh ┬á di nominal harga
 const safeFormatRupiah = (val: number) => {
-  // Format manual murni: 1500000 -> "Rp 1.500.000"
-  return "Rp " + Math.round(val).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return "Rp" + Math.round(val).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 };
 
 export function buildThermalReceiptHtml(
-  row: BookingRow & { dp_amount?: number }, // Antisipasi jika ada field dp_amount
+  row: BookingRow & { dp_amount?: number },
   type: ReceiptKind,
   customPaidValue?: number
 ) {
   const invoice = row.invoice || {};
   const total = Number(invoice.total_amount || 0);
   
-  // Ambil uang yang sudah dibayar dari invoice.paid_amount ATAU row.dp_amount
   const paidCurrent = Number(invoice.paid_amount || row.dp_amount || 0);
-
   const paidForReceipt = customPaidValue !== undefined ? Number(customPaidValue) : paidCurrent;
 
   const isLunas = type === "lunas";
@@ -64,7 +62,8 @@ export function buildThermalReceiptHtml(
     <div class="total-row bold"><span>Sisa Tagihan</span><span>: ${escapeHtml(safeFormatRupiah(Math.max(total - paidForReceipt, 0)))}</span></div>
     `;
 
-  return `<!doctype html>
+  // Simpan HTML ke variabel dulu
+  const rawHtml = `<!doctype html>
 <html>
 <head>
   <meta charset="utf-8" />
@@ -78,15 +77,14 @@ export function buildThermalReceiptHtml(
     .small { font-size: 11px; margin-bottom: 2px; line-height: 1.3; }
     .line { border-top: 1px dashed #000; margin: 6px 0; }
     
-    /* Layout Rincian Paket - Diubah agar tidak terpotong! */
     .pkg-row { margin: 6px 0; font-size: 11px; display: flex; flex-direction: column; }
     .pkg-name { width: 100%; text-align: left; white-space: pre-wrap; word-wrap: break-word; margin-bottom: 2px; }
     .pkg-price { width: 100%; text-align: right; font-weight: bold; }
     
-    /* Layout Total */
     .total-row { display: flex; justify-content: space-between; font-size: 11px; margin: 4px 0; }
     .total-row span:first-child { width: auto; flex-shrink: 0; text-align: left; }
-    .total-row span:last-child { flex: 1; text-align: right; white-space: nowrap; }
+    /* Hapus white-space nowrap di sini agar browser tidak otomatis menyisipkan Non-breaking Space */
+    .total-row span:last-child { flex: 1; text-align: right; }
     
     .bold { font-weight: bold; }
   </style>
@@ -123,4 +121,8 @@ export function buildThermalReceiptHtml(
   </div>
 </body>
 </html>`;
+
+  // SAPU JAGAT: Bersihkan SEMUA karakter invisble / non-breaking space yang mungkin terselip 
+  // di dalam seluruh string HTML sebelum dikirim ke browser/printer.
+  return rawHtml.replace(/[\u00A0\u200B\u202F\uFEFF]/g, " ");
 }
