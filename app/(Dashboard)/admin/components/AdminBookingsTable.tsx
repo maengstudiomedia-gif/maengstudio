@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Search, CheckCircle2, AlertTriangle, Info, HelpCircle } from "lucide-react";
 
-// Impor action server Anda
 import { 
   getAdminBookingsAction, 
   deleteAdminBookingAction, 
@@ -13,7 +12,6 @@ import {
   uploadPickupProofAction 
 } from "@/app/actions/adminBookings";
 
-// Impor komponen yang sudah dipecah
 import BookingTable from "./BookingTable";
 import EditBookingModal from "./EditBookingModal";
 import PaymentModal from "./PaymentModal";
@@ -28,13 +26,11 @@ export default function AdminBookingsTable() {
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [keyword, setKeyword] = useState("");
   
-  // State untuk mengontrol Modal Form yang sedang terbuka
   const [editing, setEditing] = useState<BookingRow | null>(null);
   const [pickupTarget, setPickupTarget] = useState<BookingRow | null>(null);
   const [dpPaymentTarget, setDpPaymentTarget] = useState<{ row: BookingRow; defaultAmount: string } | null>(null);
   const [thermalPrintRow, setThermalPrintRow] = useState<BookingRow | null>(null);
 
-  // --- STATE UNTUK MODAL NOTIFIKASI & KONFIRMASI PROFESIONAL ---
   const [alertModal, setAlertModal] = useState<{ isOpen: boolean; message: string; type: "success" | "error" | "info" }>({ isOpen: false, message: "", type: "info" });
   const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; message: string; onConfirm: () => void }>({ isOpen: false, message: "", onConfirm: () => {} });
 
@@ -74,7 +70,6 @@ export default function AdminBookingsTable() {
     });
   }, [bookings, keyword]);
 
-  // Handler Hapus menggunakan Modal Konfirmasi
   function handleDelete(id: string) {
     showConfirm("Apakah Anda yakin ingin menghapus pesanan ini secara permanen?", async () => {
       const result = await deleteAdminBookingAction(id);
@@ -87,10 +82,8 @@ export default function AdminBookingsTable() {
     });
   }
 
-  // Render Utama
   return (
     <div className="space-y-6">
-      {/* Search Bar */}
       <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-4 md:p-6">
         <div className="relative max-w-sm">
           <Search className="w-4 h-4 text-white/40 absolute left-3 top-3" />
@@ -103,7 +96,6 @@ export default function AdminBookingsTable() {
         </div>
       </div>
 
-      {/* Konten Tabel Utama */}
       <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl overflow-x-auto">
         {isLoading ? (
           <div className="py-20 flex justify-center">
@@ -115,15 +107,13 @@ export default function AdminBookingsTable() {
             onEdit={(row) => setEditing({ ...row })}
             onDelete={handleDelete}
             onPayDp={(row) => {
-              const invoice = row.invoice || {};
-              const savedDp = Number(invoice.dp_amount || 0);
-              setDpPaymentTarget({ 
-                row, 
-                defaultAmount: savedDp > 0 ? String(savedDp) : "" 
-              });
+              setDpPaymentTarget({ row, defaultAmount: "" });
             }}
-            
-            // PERBAIKAN PELUNASAN: Menggunakan custom modal confirm
+            // FUNGSI BARU UNTUK EDIT DP
+            onEditDp={(row) => {
+              const paidAmount = Number(row.invoice?.paid_amount || 0);
+              setDpPaymentTarget({ row, defaultAmount: String(paidAmount) });
+            }}
             onPayLunas={(row) => {
               const total = Number(row.invoice?.total_amount || 0);
               const paid = Number(row.invoice?.paid_amount || 0);
@@ -142,7 +132,6 @@ export default function AdminBookingsTable() {
                 }
               );
             }}
-
             onStartEdit={async (id) => {
               const res = await updateBookingProcessAction(id, "start_edit");
               if (res.success) fetchBookings();
@@ -164,13 +153,11 @@ export default function AdminBookingsTable() {
         )}
       </div>
 
-      {/* Render Modals Forms */}
       {editing && (
         <EditBookingModal
           initialData={editing}
           onClose={() => setEditing(null)}
           onSave={async (data) => {
-             // Menerjemahkan data secara aman agar lulus pengecekan TypeScript Netlify
              const payload = {
                 id: data.id,
                 client_name: data.client_name,
@@ -180,16 +167,13 @@ export default function AdminBookingsTable() {
                 booker_type: data.booker_type,
                 bride_name: data.bride_name,
                 groom_name: data.groom_name,
-                // Konversi string JSON menjadi array, bypass error Strict Type dari TS
                 event_details: (Array.isArray(data.event_details) 
                   ? data.event_details 
                   : typeof data.event_details === "string" 
                     ? JSON.parse(data.event_details) 
                     : []) as any[]
               };
-  
               const res = await updateAdminBookingAction(payload as any);
-            
             if (res.success) {
               setEditing(null);
               fetchBookings();
@@ -211,7 +195,7 @@ export default function AdminBookingsTable() {
             if (res.success) {
                setDpPaymentTarget(null);
                fetchBookings();
-               showAlert("Pembayaran DP berhasil disimpan! Gunakan kolom Cetak 80mm untuk struk.", "success");
+               showAlert("Pembayaran DP berhasil disimpan/diperbarui! Gunakan kolom Cetak 80mm untuk struk.", "success");
             } else {
                showAlert("Gagal update pembayaran: " + res.error, "error");
             }
@@ -254,7 +238,6 @@ export default function AdminBookingsTable() {
         />
       )}
 
-      {/* --- KOMPONEN UI MODAL ALERT --- */}
       {alertModal.isOpen && (
         <div className="fixed inset-0 z-[999999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-3xl p-6 space-y-4 text-center shadow-2xl animate-in zoom-in duration-200">
@@ -281,7 +264,6 @@ export default function AdminBookingsTable() {
         </div>
       )}
 
-      {/* --- KOMPONEN UI MODAL KONFIRMASI --- */}
       {confirmModal.isOpen && (
         <div className="fixed inset-0 z-[999999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-sm bg-[#111] border border-white/10 rounded-3xl p-6 space-y-4 text-center shadow-2xl animate-in zoom-in duration-200">

@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ShieldAlert, Search, Loader2, X, ReceiptText, ChevronRight } from "lucide-react";
+import { ShieldAlert, Search, Loader2, X, ReceiptText, TrendingUp, Users } from "lucide-react";
 import { getAdminBookingsAction } from "@/app/actions/adminBookings";
+import { getLeadsAction } from "@/app/actions/leadsActions"; // <-- Import sudah disesuaikan
 import AdminBookingCalendarPanel from "@/app/components/bookingCalendar/AdminBookingCalendarPanel";
 
 // Fungsi Helper Format Rupiah
@@ -14,7 +15,7 @@ function formatRupiah(value: number) {
   }).format(Number(value || 0));
 }
 
-// Tipe Data Sederhana untuk Dashboard
+// Tipe Data
 type DashboardBooking = {
   id: string;
   invoice_number: string;
@@ -36,6 +37,7 @@ type FilterType = "menunggu_dp" | "menunggu_pelunasan" | "proses_edit" | "proses
 
 export default function AdminDashboardPage() {
   const [bookings, setBookings] = useState<DashboardBooking[]>([]);
+  const [leads, setLeads] = useState<any[]>([]); // State untuk data leads
   const [isLoading, setIsLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -43,16 +45,22 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     async function fetchDashboardData() {
       setIsLoading(true);
-      const res = await getAdminBookingsAction();
-      if (res.success) {
-        setBookings((res.data || []) as DashboardBooking[]);
-      }
+      
+      // Mengambil data bookings dan leads secara bersamaan (Paralel) agar loading lebih cepat
+      const [bookingsRes, leadsRes] = await Promise.all([
+        getAdminBookingsAction(),
+        getLeadsAction()
+      ]);
+
+      if (bookingsRes.success) setBookings((bookingsRes.data || []) as DashboardBooking[]);
+      if (leadsRes.success) setLeads(leadsRes.data || []);
+      
       setIsLoading(false);
     }
     fetchDashboardData();
   }, []);
 
-  // --- MENGHITUNG STATISTIK ---
+  // --- MENGHITUNG STATISTIK BOOKING ---
   const stats = useMemo(() => {
     let pendapatanBulanIni = 0;
     let menungguDp = 0;
@@ -70,13 +78,11 @@ export default function AdminDashboardPage() {
       const inv = b.invoice || { total_amount: 0, paid_amount: 0, payment_status: "unpaid" };
       const proc = b.process || { stage: "awaiting_settlement" };
       
-      // 1. Pendapatan Bulan Ini (Dari pesanan yang dibuat bulan ini)
       const bookingDate = new Date(b.created_at);
       if (bookingDate.getMonth() === currentMonth && bookingDate.getFullYear() === currentYear) {
         pendapatanBulanIni += Number(inv.paid_amount || 0);
       }
 
-      // 2. Kategori Status
       const isPaid = inv.payment_status === "paid";
       const paidAmount = Number(inv.paid_amount || 0);
 
@@ -86,12 +92,51 @@ export default function AdminDashboardPage() {
       else if (isPaid && proc.stage === "print_process") prosesCetak++;
       else if (isPaid && proc.stage === "completed") menungguDiambil++;
       else if (isPaid && proc.stage === "picked_up") selesai++;
-      // Jika paid tapi stage masih awaiting_settlement (baru saja lunas tapi belum diproses)
       else if (isPaid && proc.stage === "awaiting_settlement") prosesEdit++; 
     });
 
     return { pendapatanBulanIni, menungguDp, menungguPelunasan, prosesEdit, prosesCetak, menungguDiambil, selesai };
   }, [bookings]);
+
+  // --- MENGHITUNG INFOGRAFIS PAKET TERLARIS ---
+  const packageStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    bookings.forEach(b => {
+      const pkgName = b.package_name || "Lainnya";
+      counts[pkgName] = (counts[pkgName] || 0) + 1;
+    });
+
+    const totalBookings = bookings.length || 1; // hindari pembagian 0
+
+    return Object.entries(counts)
+      .map(([name, count]) => ({
+        name,
+        count,
+        percentage: Math.round((count / totalBookings) * 100)
+      }))
+      .sort((a, b) => b.count - a.count) // Urutkan dari yg paling banyak
+      .slice(0, 4); // Ambil Top 4 saja
+  }, [bookings]);
+
+  // --- MENGHITUNG INFOGRAFIS KONVERSI LEADS ---
+  const leadStats = useMemo(() => {
+    const total = leads.length;
+    if (total === 0) return { total: 0, success: 0, failed: 0, pending: 0, successPct: 0, failedPct: 0, pendingPct: 0 };
+
+    const success = leads.filter(l => l.status === "booked").length;
+    const failed = leads.filter(l => l.status === "cancelled").length;
+    const pending = leads.filter(l => l.status === "pending").length;
+
+    return {
+      total,
+      success,
+      failed,
+      pending,
+      successPct: Math.round((success / total) * 100),
+      failedPct: Math.round((failed / total) * 100),
+      pendingPct: Math.round((pending / total) * 100)
+    };
+  }, [leads]);
 
   // --- FILTER LIST PESANAN ---
   const filteredBookings = useMemo(() => {
@@ -112,7 +157,6 @@ export default function AdminDashboardPage() {
     });
   }, [bookings, activeFilter]);
 
-  // Label untuk Judul Filter
   const filterLabels: Record<NonNullable<FilterType>, string> = {
     menunggu_dp: "Menunggu DP",
     menunggu_pelunasan: "Menunggu Pelunasan",
@@ -135,7 +179,7 @@ export default function AdminDashboardPage() {
           <h2 className="text-3xl font-light">Ringkasan Sistem</h2>
         </div>
         
-        {/* Search Bar (Opsional di halaman ini) */}
+        {/* Search Bar */}
         <div className="relative w-full md:w-64">
           <Search className="absolute left-3 top-3 w-4 h-4 text-white/30" />
           <input 
@@ -162,7 +206,7 @@ export default function AdminDashboardPage() {
             }))}
           />
 
-          {/* KARTU PENDAPATAN (Non-Clickable) */}
+          {/* KARTU PENDAPATAN */}
           <div className="mb-6">
             <div className="bg-gradient-to-br from-emerald-500/10 to-emerald-900/10 border border-emerald-500/20 rounded-3xl p-6 md:p-8">
               <p className="text-sm font-medium text-emerald-400 mb-2">Pendapatan Masuk (Bulan Ini)</p>
@@ -172,7 +216,79 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* GRID KARTU STATISTIK (Clickable) */}
+          {/* ---------------- BAGIAN INFOGRAFIS ---------------- */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+            
+            {/* Infografis 1: Paket Paling Diminati */}
+            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-amber-500/10 rounded-lg text-amber-500"><TrendingUp className="w-5 h-5" /></div>
+                <h3 className="text-lg font-medium text-white">Top Paket Diminati</h3>
+              </div>
+              
+              {packageStats.length > 0 ? (
+                <div className="space-y-4">
+                  {packageStats.map((pkg, idx) => (
+                    <div key={idx}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-white/80 font-medium truncate pr-4">{pkg.name}</span>
+                        <span className="text-amber-500 font-bold">{pkg.percentage}% <span className="text-white/30 text-xs font-normal">({pkg.count})</span></span>
+                      </div>
+                      <div className="w-full bg-white/5 rounded-full h-2 overflow-hidden">
+                        <div 
+                          className="bg-gradient-to-r from-amber-600 to-amber-400 h-2 rounded-full transition-all duration-1000" 
+                          style={{ width: `${pkg.percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center text-white/30 text-sm">Belum ada data paket.</div>
+              )}
+            </div>
+
+            {/* Infografis 2: Konversi Calon Klien (Leads) */}
+            <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-6">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-blue-500/10 rounded-lg text-blue-400"><Users className="w-5 h-5" /></div>
+                <h3 className="text-lg font-medium text-white">Persentase Sukses Leads</h3>
+                <span className="ml-auto text-xs text-white/40 bg-white/5 px-3 py-1 rounded-full">Total: {leadStats.total} Leads</span>
+              </div>
+
+              <div className="flex flex-col h-full justify-center pb-4">
+                {/* Progress Bar Gabungan */}
+                <div className="w-full flex h-4 bg-white/5 rounded-full overflow-hidden mb-6">
+                  <div className="bg-emerald-500 h-full transition-all duration-1000" style={{ width: `${leadStats.successPct}%` }} title="Sukses (Booked)" />
+                  <div className="bg-rose-500 h-full transition-all duration-1000" style={{ width: `${leadStats.failedPct}%` }} title="Gagal (Cancelled)" />
+                  <div className="bg-amber-500/50 h-full transition-all duration-1000" style={{ width: `${leadStats.pendingPct}%` }} title="Pending" />
+                </div>
+
+                {/* Keterangan Detail */}
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-emerald-500/10 border border-emerald-500/20 p-3 rounded-xl text-center">
+                    <p className="text-xs text-emerald-500/70 uppercase mb-1">Sukses (Booked)</p>
+                    <p className="text-2xl font-light text-emerald-400">{leadStats.successPct}%</p>
+                    <p className="text-[10px] text-white/40 mt-1">{leadStats.success} Klien</p>
+                  </div>
+                  <div className="bg-rose-500/10 border border-rose-500/20 p-3 rounded-xl text-center">
+                    <p className="text-xs text-rose-500/70 uppercase mb-1">Gagal (Batal)</p>
+                    <p className="text-2xl font-light text-rose-400">{leadStats.failedPct}%</p>
+                    <p className="text-[10px] text-white/40 mt-1">{leadStats.failed} Klien</p>
+                  </div>
+                  <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl text-center">
+                    <p className="text-xs text-amber-500/70 uppercase mb-1">Pending</p>
+                    <p className="text-2xl font-light text-amber-400">{leadStats.pendingPct}%</p>
+                    <p className="text-[10px] text-white/40 mt-1">{leadStats.pending} Klien</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+          {/* ---------------- AKHIR BAGIAN INFOGRAFIS ---------------- */}
+
+          {/* GRID KARTU STATISTIK BOOKING */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-10">
             {[
               { id: "menunggu_dp", label: "Menunggu DP", count: stats.menungguDp, color: "text-rose-400", border: "border-rose-500/20", bg: "bg-rose-500/5", activeBg: "bg-rose-500/20 ring-1 ring-rose-500" },

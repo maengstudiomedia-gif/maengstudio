@@ -6,7 +6,7 @@ import { extractDateKeysFromEventDetails } from "@/lib/bookingCalendar/extractDa
 import { validateBookingEventDatesAction, revalidateBookingCalendarPaths } from "@/app/actions/bookingCalendarActions";
 import { 
   supabaseAdmin, getErrorMessage, parseProcessMeta, parseEventDetails,
-  BookingPayload, UpdateBookingPayload 
+  UpdateBookingPayload 
 } from "./utils";
 
 export async function generateInvoiceNumberAction() {
@@ -40,52 +40,8 @@ export async function generateInvoiceNumberAction() {
   return `M${dd}A${mm}E${yyyy}N${formattedNumber}G`;
 }
 
-export async function createAdminBookingAction(payload: BookingPayload) {
-  try {
-    const { 
-      userId, invoice_number, package_id, service_type, client_name, client_phone, 
-      event_type, custom_event_type, booker_type, bride_name, groom_name, event_details, total_price,
-      addon_package_ids,
-    } = payload;
-
-    if (!userId || !package_id || !client_name || !client_phone || !Array.isArray(event_details) || event_details.length === 0) {
-      return { success: false, error: "Data pemesanan tidak lengkap." };
-    }
-
-    const dateKeys = extractDateKeysFromEventDetails(event_details);
-    const cap = await validateBookingEventDatesAction({ dateKeys, excludeBookingId: null });
-    if (!cap.success) return { success: false, error: cap.error || "Jadwal penuh." };
-
-    const addonIds = Array.isArray(addon_package_ids) ? addon_package_ids.filter(Boolean) : [];
-    const initialNotes = JSON.stringify({ addon_package_ids: addonIds });
-
-    const { data: booking, error: bookingError } = await supabaseAdmin
-      .from('bookings')
-      .insert([{
-        user_id: userId, invoice_number, package_id, service_type, client_name, client_phone,
-        event_type, custom_event_type, booker_type, bride_name, groom_name, event_details,
-        status: 'pending_payment',
-        notes: initialNotes,
-      }]).select().single();
-
-    if (bookingError) throw new Error(bookingError.message);
-
-    const { error: invoiceError } = await supabaseAdmin
-      .from('invoices')
-      .insert([{
-        booking_id: booking.id, user_id: userId, total_amount: total_price,
-        dp_amount: total_price * 0.5, paid_amount: 0, payment_status: 'unpaid'
-      }]);
-
-    if (invoiceError) throw new Error(invoiceError.message);
-
-    revalidatePath("/admin/packages");
-    revalidateBookingCalendarPaths();
-    return { success: true };
-  } catch (error: unknown) {
-    return { success: false, error: getErrorMessage(error) };
-  }
-}
+// FUNGSI createAdminBookingAction TELAH DIHAPUS DARI SINI
+// Fungsi tersebut kini berada di dalam file transactionActions.ts untuk menghindari duplikasi ekspor.
 
 export async function getAdminBookingsAction() {
   try {
@@ -107,9 +63,18 @@ export async function getAdminBookingsAction() {
 
     const rows = bookingRows.map((booking) => {
       const invoice = invoiceMap.get(String(booking.id || "")) || null;
+      
+      // MENGAMBIL DATA SNAPSHOT DARI KOLOM DATABASE BARU (Jika ada)
+      const packageSnapshot = booking.package_snapshot as Record<string, unknown> | null;
+      const addonsSnapshot = booking.addon_packages as Array<Record<string, unknown>> | null;
+      
+      // Fallback ke relasi tabel (packageMap) jika snapshot belum ada (untuk data lama)
       const pkg = packageMap.get(String(booking.package_id || "")) || null;
+
       let addonPackageIds: string[] = [];
       let dpPaidAmount: number | undefined;
+
+      // Parsing notes untuk data meta lama
       if (booking.notes) {
         try {
           const meta =
@@ -126,20 +91,35 @@ export async function getAdminBookingsAction() {
           /* abaikan */
         }
       }
-      const addonLines = addonPackageIds
-        .map((id) => packageMap.get(id))
-        .filter(Boolean)
-        .map((p) => ({
-          id: String((p as Record<string, unknown>).id || ""),
-          name: String((p as Record<string, unknown>).name || "-"),
-          type: String((p as Record<string, unknown>).type || "-"),
-          price: Number((p as Record<string, unknown>).price || 0),
+
+      // Prioritaskan Addons dari Snapshot JSONB, jika kosong gunakan cara lama
+      let addonLines = [];
+      if (addonsSnapshot && addonsSnapshot.length > 0) {
+        addonLines = addonsSnapshot.map((p) => ({
+          id: String(p.id || ""),
+          name: String(p.name || "-"),
+          type: String(p.type || "-"),
+          price: Number(p.price || 0),
         }));
+      } else {
+         addonLines = addonPackageIds
+          .map((id) => packageMap.get(id))
+          .filter(Boolean)
+          .map((p) => ({
+            id: String((p as Record<string, unknown>).id || ""),
+            name: String((p as Record<string, unknown>).name || "-"),
+            type: String((p as Record<string, unknown>).type || "-"),
+            price: Number((p as Record<string, unknown>).price || 0),
+          }));
+      }
+
       return {
         ...booking,
-        package_name: String(pkg?.name || "-"),
-        package_type: String(pkg?.type || booking.service_type || "-"),
-        package_price: Number((pkg as Record<string, unknown> | null)?.price ?? 0),
+        // Prioritaskan Nama/Harga dari Snapshot JSONB, jika tidak ada gunakan relasi paket
+        package_name: String(packageSnapshot?.name || pkg?.name || "-"),
+        package_type: String(packageSnapshot?.type || pkg?.type || booking.service_type || "-"),
+        package_price: Number(packageSnapshot?.price ?? (pkg as Record<string, unknown> | null)?.price ?? 0),
+        
         invoice,
         process: parseProcessMeta(booking.notes),
         addon_package_ids: addonPackageIds,
@@ -237,12 +217,12 @@ export async function findInvoiceByNumberAction(invoiceNumber: string) {
     // Batas Edit: Max 15 hari dari Acara Terakhir
     const editDeadlineMs = lastEventMs ? lastEventMs + (15 * oneDay) : null;
     const editDaysLeft = editDeadlineMs ? Math.ceil((editDeadlineMs - todayMs) / oneDay) : null;
-    const editDeadlineDate = editDeadlineMs ? new Date(editDeadlineMs).toISOString() : null; // Kirim tanggal pastinya
+    const editDeadlineDate = editDeadlineMs ? new Date(editDeadlineMs).toISOString() : null;
 
     // Batas Cetak: Max 40 hari dari Acara Terakhir
     const printDeadlineMs = lastEventMs ? lastEventMs + (40 * oneDay) : null;
     const printDaysLeft = printDeadlineMs ? Math.ceil((printDeadlineMs - todayMs) / oneDay) : null;
-    const printDeadlineDate = printDeadlineMs ? new Date(printDeadlineMs).toISOString() : null; // Kirim tanggal pastinya
+    const printDeadlineDate = printDeadlineMs ? new Date(printDeadlineMs).toISOString() : null;
     // -----------------------------------------
 
     let progressLabel = "Menunggu Pelunasan";
@@ -268,8 +248,8 @@ export async function findInvoiceByNumberAction(invoiceNumber: string) {
           dpDaysLeft, 
           editDaysLeft, 
           printDaysLeft,
-          editDeadlineDate,  // Ditambahkan
-          printDeadlineDate  // Ditambahkan
+          editDeadlineDate,  
+          printDeadlineDate  
         } 
       },
     };

@@ -10,17 +10,31 @@ const redis = new Redis({
 });
 
 export async function proxy(request: NextRequest) {
-  let response = NextResponse.next({ request });
+  // 1. Ekstrak dan set custom headers (berasal dari middleware lama)
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", request.nextUrl.pathname);
 
-  response.headers.set("X-Content-Type-Options", "nosniff");
-  response.headers.set("X-Frame-Options", "DENY");
-  response.headers.set("X-XSS-Protection", "1; mode=block");
-  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  response.headers.set(
-    "Permissions-Policy",
-    "camera=(), microphone=(), geolocation=(), browsing-topics=()"
-  );
+  // 2. Inisialisasi response dengan menyertakan request headers yang sudah dimodifikasi
+  let response = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 
+  // Fungsi pembantu untuk memasang header keamanan
+  const setSecurityHeaders = (res: NextResponse) => {
+    res.headers.set("X-Content-Type-Options", "nosniff");
+    res.headers.set("X-Frame-Options", "DENY");
+    res.headers.set("X-XSS-Protection", "1; mode=block");
+    res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.headers.set(
+      "Permissions-Policy",
+      "camera=(), microphone=(), geolocation=(), browsing-topics=()"
+    );
+  };
+
+  // 3. Pasang header keamanan pada response awal
+  setSecurityHeaders(response);
+
+  // 4. Inisialisasi Supabase
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -31,8 +45,18 @@ export async function proxy(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+          
+          // Pastikan request headers tetap dipertahankan saat response di-reset oleh Supabase
+          response = NextResponse.next({
+            request: { headers: requestHeaders },
+          });
+          
+          // Pasang kembali header keamanan karena response objeknya baru
+          setSecurityHeaders(response);
+          
+          cookiesToSet.forEach(({ name, value, options }) => 
+            response.cookies.set(name, value, options)
+          );
         },
       },
     }
@@ -110,6 +134,7 @@ export async function proxy(request: NextRequest) {
         return NextResponse.redirect(new URL("/login?error=device_mismatch", request.url));
       }
     }
+    
     // Jangan gunakan last_sign_in_at sebagai timeout request-by-request;
     // nilai ini tidak berubah di setiap request dan bisa memicu logout palsu.
     // Validitas sesi tetap dijaga oleh Supabase JWT + refresh token.

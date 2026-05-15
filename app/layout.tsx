@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import PWARegister from "./components/PWARegister";
@@ -17,7 +17,6 @@ export const metadata: Metadata = {
   title: "Maeng Studio",
   description: "Platform layanan dan manajemen pesanan Maeng Studio",
   manifest: "/manifest.webmanifest",
-  themeColor: "#050505",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
@@ -27,6 +26,11 @@ export const metadata: Metadata = {
     icon: "/icon?size=512",
     apple: "/apple-icon",
   },
+};
+
+// Pengaturan viewport dipisahkan ke sini
+export const viewport: Viewport = {
+  themeColor: "#050505",
 };
 
 export default function RootLayout({

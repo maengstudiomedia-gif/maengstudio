@@ -6,6 +6,82 @@ import {
   mergeProcessMetaAsNotes, mergeBookingNotesPatch, STORAGE_BUCKET, BookingProcessMeta 
 } from "./utils";
 
+// --- FUNGSI BARU: MEMBUAT PESANAN ADMIN ---
+export async function createAdminBookingAction(payload: any) {
+  try {
+    // 1. Ambil detail Paket Utama untuk Snapshot (Nama, Harga, Tipe)
+    const { data: mainPkg, error: mainPkgError } = await supabaseAdmin
+      .from("packages")
+      .select("name, price, type")
+      .eq("id", payload.package_id)
+      .single();
+
+    if (mainPkgError && payload.package_id) {
+      console.warn("Gagal mengambil paket utama:", mainPkgError);
+    }
+
+    // 2. Ambil detail Paket Tambahan (Add-ons) untuk Snapshot
+    let addonSnapshots: any[] = [];
+    if (payload.addon_package_ids && payload.addon_package_ids.length > 0) {
+      const { data: addons, error: addonsError } = await supabaseAdmin
+        .from("packages")
+        .select("id, name, price")
+        .in("id", payload.addon_package_ids);
+      
+      if (addons && !addonsError) addonSnapshots = addons;
+    }
+
+    // 3. Masukkan data ke tabel Bookings beserta JSONB Snapshot
+    const { data: booking, error: bookingError } = await supabaseAdmin
+      .from("bookings")
+      .insert({
+        user_id: payload.userId,
+        invoice_number: payload.invoice_number,
+        service_type: payload.service_type,
+        
+        // --- SNAPSHOT DATA ---
+        package_snapshot: mainPkg ? { name: mainPkg.name, price: mainPkg.price, type: mainPkg.type } : null,
+        addon_packages: addonSnapshots,
+        // ---------------------
+
+        client_name: payload.client_name,
+        client_phone: payload.client_phone,
+        event_type: payload.event_type,
+        custom_event_type: payload.custom_event_type,
+        booker_type: payload.booker_type,
+        bride_name: payload.bride_name,
+        groom_name: payload.groom_name,
+        event_details: JSON.stringify(payload.event_details),
+        status: "pending_payment",
+      })
+      .select()
+      .single();
+
+    if (bookingError) throw new Error(bookingError.message);
+
+    // 4. Masukkan data ke tabel Invoices
+    const { error: invoiceError } = await supabaseAdmin
+      .from("invoices")
+      .insert({
+        booking_id: booking.id,
+        user_id: payload.userId,
+        total_amount: payload.total_price, // Diambil dari total kalkulasi di form admin
+        dp_amount: 0,
+        paid_amount: 0,
+        payment_status: "unpaid",
+      });
+
+    if (invoiceError) throw new Error(invoiceError.message);
+
+    // 5. Refresh halaman UI Admin
+    revalidatePath("/admin/bookings");
+    return { success: true };
+  } catch (error: unknown) {
+    return { success: false, error: getErrorMessage(error) };
+  }
+}
+
+// --- FUNGSI UPDATE PEMBAYARAN ---
 export async function updateBookingPaymentAction(bookingId: string, paymentType: "dp" | "lunas", amount?: number) {
   try {
     if (!bookingId) return { success: false, error: "ID pesanan tidak ditemukan." };
@@ -97,6 +173,7 @@ export async function updateBookingPaymentAction(bookingId: string, paymentType:
   }
 }
 
+// --- FUNGSI UPDATE STATUS PROSES (EDIT/PRINT/PICKUP) ---
 export async function updateBookingProcessAction(
   bookingId: string, actionType: "start_edit" | "start_print" | "finish" | "picked_up", pickupProofUrl?: string
 ) {
@@ -141,6 +218,7 @@ export async function updateBookingProcessAction(
   }
 }
 
+// --- FUNGSI UPLOAD BUKTI PENGAMBILAN ---
 export async function uploadPickupProofAction(formData: FormData) {
   try {
     const bookingId = String(formData.get("bookingId") || "");

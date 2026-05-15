@@ -10,7 +10,9 @@ import {
   MessageCircle,
   ChevronRight,
   Loader2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  CheckCircle2,
+  Printer
 } from "lucide-react";
 import { getPublicPackages, getClientShowcase } from "@/app/actions/publicActions";
 import PublicBookingCalendarSection from "@/app/components/bookingCalendar/PublicBookingCalendarSection";
@@ -97,7 +99,7 @@ export default function LandingPage() {
             <Link href="/cek-nota" className="w-full sm:w-auto px-8 py-4 bg-white text-black font-bold rounded-2xl hover:scale-105 transition-transform flex items-center justify-center gap-2">
               Lacak Pesanan Saya <ChevronRight className="w-4 h-4" />
             </Link>
-            <a href="https://wa.me/628117873878" target="_blank" className="w-full sm:w-auto px-8 py-4 bg-white/5 border border-white/10 font-bold rounded-2xl hover:bg-white/10 transition-all flex items-center justify-center gap-2">
+            <a href="https://wa.me/628117873878" target="_blank" rel="noopener noreferrer" className="w-full sm:w-auto px-8 py-4 bg-white/5 border border-white/10 font-bold rounded-2xl hover:bg-white/10 transition-all flex items-center justify-center gap-2">
               <MessageCircle className="w-5 h-5 text-emerald-400" /> Konsultasi Gratis
             </a>
           </div>
@@ -109,7 +111,7 @@ export default function LandingPage() {
         <PublicBookingCalendarSection />
       </section>
 
-      {/* --- SECTION PAKET LAYANAN DENGAN GAMBAR --- */}
+      {/* --- SECTION PAKET LAYANAN --- */}
       <section id="layanan" className="py-24 px-6 max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-12 gap-4">
           <div className="space-y-2">
@@ -124,18 +126,24 @@ export default function LandingPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {packages.map((pkg) => {
-              // Menentukan gambar default berdasarkan tipe jika tidak ada gambar di database
+              // Set gambar default
               const fallbackImg = pkg.type === "Audio" 
-                ? "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?q=80&w=800&auto=format&fit=crop" // Gambar Audio/Mixer
-                : "https://images.unsplash.com/photo-1511285560929-80b456fea0bc?q=80&w=800&auto=format&fit=crop"; // Gambar Kamera/Wedding
+                ? "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?q=80&w=800&auto=format&fit=crop" 
+                : "https://images.unsplash.com/photo-1511285560929-80b456fea0bc?q=80&w=800&auto=format&fit=crop"; 
                 
               const displayImage = pkg.image_url || pkg.image || fallbackImg;
+
+              // Parsing data JSON dengan aman
+              let featuresList: string[] = [];
+              let printsList: string[] = [];
+              try { featuresList = typeof pkg.features === 'string' ? JSON.parse(pkg.features) : (pkg.features || []); } catch(e) {}
+              try { printsList = typeof pkg.print_results === 'string' ? JSON.parse(pkg.print_results) : (pkg.print_results || []); } catch(e) {}
 
               return (
                 <div key={pkg.id} className="group flex flex-col rounded-3xl bg-white/[0.02] border border-white/5 hover:border-blue-500/50 transition-all duration-500 overflow-hidden">
                   
                   {/* Container Gambar */}
-                  <div className="relative h-56 w-full overflow-hidden bg-black">
+                  <div className="relative h-56 w-full overflow-hidden bg-black shrink-0">
                     <img 
                       src={displayImage} 
                       alt={pkg.name}
@@ -152,14 +160,50 @@ export default function LandingPage() {
                   {/* Konten Text */}
                   <div className="p-6 md:p-8 flex flex-col flex-1">
                     <h4 className="text-2xl font-bold mb-2">{pkg.name}</h4>
-                    <p className="text-white/40 text-sm mb-6 line-clamp-3 flex-1">{pkg.description || "Layanan profesional terbaik dari Maeng Studio."}</p>
+                    {pkg.description && (
+                      <p className="text-white/40 text-sm mb-6">{pkg.description}</p>
+                    )}
                     
-                    <div className="pt-6 border-t border-white/5 flex items-center justify-between mt-auto">
+                    {/* Daftar Fitur / Kru */}
+                    <div className="flex-1">
+                      {featuresList.length > 0 && (
+                        <div className="mb-4 space-y-2">
+                          <p className="text-[10px] text-white/30 uppercase font-bold tracking-widest mb-2">Termasuk:</p>
+                          {featuresList.map((feature, idx) => (
+                            <div key={`feat-${idx}`} className="flex items-start text-sm text-white/80">
+                              <CheckCircle2 className="w-4 h-4 text-blue-400 mr-2.5 mt-0.5 shrink-0" />
+                              <span className="leading-tight">{feature}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Daftar Hasil Cetakan */}
+                      {printsList.length > 0 && (
+                        <div className="pt-4 border-t border-white/5 space-y-2">
+                          <p className="text-[10px] text-white/30 uppercase font-bold tracking-widest mb-2">Hasil Akhir/Cetak:</p>
+                          {printsList.map((print, idx) => (
+                            <div key={`print-${idx}`} className="flex items-start text-sm text-white/80">
+                              <Printer className="w-4 h-4 text-emerald-400 mr-2.5 mt-0.5 shrink-0" />
+                              <span className="leading-tight">{print}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Harga & Tombol Action */}
+                    <div className="pt-6 mt-6 border-t border-white/5 flex items-center justify-between shrink-0">
                       <div>
                         <p className="text-[10px] text-white/30 uppercase font-bold tracking-tighter">Mulai Dari</p>
                         <p className="text-xl font-bold text-emerald-400">{formatRupiah(pkg.price)}</p>
                       </div>
-                      <a href={`https://wa.me/628117873878?text=Halo Maeng Studio, saya tertarik dengan ${pkg.name}`} className="p-3 bg-white/5 rounded-xl group-hover:bg-blue-600 transition-colors">
+                      <a 
+                        href={`https://wa.me/628117873878?text=Halo Maeng Studio, saya tertarik dengan ${pkg.name} seharga ${formatRupiah(pkg.price)}`} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="p-3 bg-white/5 rounded-xl group-hover:bg-blue-600 transition-colors"
+                      >
                         <ChevronRight className="w-5 h-5 text-white" />
                       </a>
                     </div>
@@ -233,7 +277,7 @@ export default function LandingPage() {
           <div className="space-y-6">
             <h4 className="font-bold text-white uppercase tracking-widest text-xs">Hubungi Kami</h4>
             <div className="space-y-4">
-              <a href="https://wa.me/628117873878" target="_blank" className="flex items-center gap-4 group">
+              <a href="https://wa.me/628117873878" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 group">
                 <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500 transition-colors">
                   <MessageCircle className="w-6 h-6 text-emerald-500 group-hover:text-white" />
                 </div>
@@ -242,7 +286,7 @@ export default function LandingPage() {
                   <p className="text-sm font-medium">0811 7873 878</p>
                 </div>
               </a>
-              <a href="https://share.google/le4lb3AN1gXf20OQQ" target="_blank" className="flex items-center gap-4 group">
+              <a href="https://share.google/le4lb3AN1gXf20OQQ" target="_blank" rel="noopener noreferrer" className="flex items-center gap-4 group">
                 <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500 transition-colors">
                   <MapPin className="w-6 h-6 text-blue-500 group-hover:text-white" />
                 </div>
