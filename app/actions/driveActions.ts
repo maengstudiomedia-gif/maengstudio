@@ -8,6 +8,62 @@ import {
 } from "@/lib/google-drive";
 import { supabaseAdmin, mergeBookingNotesPatch } from "@/app/actions/adminBookings/utils";
 
+type DrivePhoto = {
+  id: string;
+  name: string;
+  thumbnail: string;
+  url: string;
+  orientation: "landscape" | "portrait" | "square";
+};
+
+type SortirNotes = {
+  clientName?: string;
+  folderId?: string;
+  sourceFolderId?: string;
+  selectedFileIds?: string[];
+  movedFileIds?: string[];
+  moveStatus?: "in_progress" | "completed";
+  selectedAt?: string;
+  count?: number;
+  mode?: string;
+};
+
+function parseSortirNotes(notes: unknown): SortirNotes | null {
+  if (!notes) return null;
+  let source: unknown = notes;
+  if (typeof notes === "string") {
+    try {
+      source = JSON.parse(notes) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!source || typeof source !== "object") return null;
+  const sortir = (source as { sortir?: unknown }).sortir;
+  if (!sortir || typeof sortir !== "object") return null;
+  return sortir as SortirNotes;
+}
+
+function mapDriveFileToPhoto(file: {
+  id?: string | null;
+  name?: string | null;
+  imageMediaMetadata?: { width?: number | null; height?: number | null } | null;
+}): DrivePhoto | null {
+  if (!file.id || !file.name) return null;
+  const width = file.imageMediaMetadata?.width ?? 0;
+  const height = file.imageMediaMetadata?.height ?? 0;
+  const orientation: DrivePhoto["orientation"] =
+    width > height ? "landscape" : width < height ? "portrait" : "square";
+
+  return {
+    id: file.id,
+    name: file.name,
+    thumbnail: `/api/drive-image/${file.id}?thumb=1`,
+    url: `/api/drive-image/${file.id}`,
+    orientation,
+  };
+}
+
 async function moveSelectedFileToFolder(
   fileId: string,
   sourceFolderId: string,
@@ -43,6 +99,7 @@ async function moveSelectedFileToFolder(
         maeng_sortir: "selected",
         maeng_sortir_client: clientName.slice(0, 100),
         maeng_sortir_booking: bookingId,
+        maeng_sortir_original_name: originalName.slice(0, 100),
       },
     },
     supportsAllDrives: true,
@@ -50,11 +107,72 @@ async function moveSelectedFileToFolder(
   });
 }
 
-async function persistSelectionToBooking(
+async function revertMovedFileToSource(
+  fileId: string,
+  sourceFolderId: string,
+  targetFolderId: string,
+  clientName: string
+) {
+  const file = await drive.files.get({
+    fileId,
+    fields: "parents, name, appProperties",
+    supportsAllDrives: true,
+  });
+
+  const parents = file.data.parents ?? [];
+  if (parents.length === 1 && parents[0] === sourceFolderId) {
+    return;
+  }
+
+  const prefix = `${clientName} - `;
+  const storedOriginal = file.data.appProperties?.maeng_sortir_original_name;
+  const originalName =
+    storedOriginal ||
+    (file.data.name?.startsWith(prefix) ? file.data.name.slice(prefix.length) : file.data.name) ||
+    `foto-${fileId}`;
+
+  await drive.files.update({
+    fileId,
+    addParents: sourceFolderId,
+    removeParents: targetFolderId,
+    requestBody: {
+      name: originalName.slice(0, 240),
+      appProperties: {
+        maeng_sortir: null,
+        maeng_sortir_client: null,
+        maeng_sortir_booking: null,
+        maeng_sortir_original_name: null,
+      } as unknown as Record<string, string>,
+    },
+    supportsAllDrives: true,
+    fields: "id, parents",
+  });
+}
+
+async function listMovedPhotosForBooking(bookingId: string): Promise<DrivePhoto[]> {
+  const targetFolderId = getCentralSortirFolderId();
+  if (!targetFolderId) return [];
+
+  const response = await drive.files.list({
+    q: `'${targetFolderId}' in parents and mimeType contains 'image/' and trashed = false and appProperties has { key='maeng_sortir_booking' and value='${bookingId}' }`,
+    fields: "files(id, name, imageMediaMetadata)",
+    pageSize: 500,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+
+  return (response.data.files || [])
+    .map(mapDriveFileToPhoto)
+    .filter((photo): photo is DrivePhoto => photo !== null);
+}
+
+async function persistSortirProgress(
   bookingId: string,
   clientName: string,
-  selectedFileIds: string[],
-  sortirFolderId: string
+  sourceFolderId: string,
+  sortirFolderId: string,
+  movedFileIds: string[],
+  maxPhotos: number
 ) {
   const { data: booking } = await supabaseAdmin
     .from("bookings")
@@ -62,18 +180,41 @@ async function persistSelectionToBooking(
     .eq("id", bookingId)
     .single();
 
+  const existing = parseSortirNotes(booking?.notes);
+  const moveStatus = movedFileIds.length >= maxPhotos ? "completed" : "in_progress";
+
   const notes = mergeBookingNotesPatch(booking?.notes, {
     sortir: {
       clientName,
       folderId: sortirFolderId,
-      selectedFileIds,
-      selectedAt: new Date().toISOString(),
-      count: selectedFileIds.length,
+      sourceFolderId,
+      movedFileIds,
+      selectedFileIds: movedFileIds,
+      moveStatus,
+      selectedAt: existing?.selectedAt ?? new Date().toISOString(),
+      count: movedFileIds.length,
       mode: "move",
     },
   });
 
   await supabaseAdmin.from("bookings").update({ notes }).eq("id", bookingId);
+}
+
+async function persistSelectionToBooking(
+  bookingId: string,
+  clientName: string,
+  selectedFileIds: string[],
+  sortirFolderId: string,
+  sourceFolderId: string
+) {
+  await persistSortirProgress(
+    bookingId,
+    clientName,
+    sourceFolderId,
+    sortirFolderId,
+    selectedFileIds,
+    selectedFileIds.length
+  );
 }
 
 export async function checkGoogleDriveConfigAction(): Promise<{
@@ -193,7 +334,13 @@ export async function submitClientSelectionAction(
       );
     }
 
-    await persistSelectionToBooking(bookingId, clientName, selectedFileIds, targetFolderId);
+    await persistSelectionToBooking(
+      bookingId,
+      clientName,
+      selectedFileIds,
+      targetFolderId,
+      sourceFolderId
+    );
 
     return { success: true };
   } catch (error) {
@@ -202,6 +349,184 @@ export async function submitClientSelectionAction(
     return {
       success: false,
       message: `Gagal menyimpan pilihan foto: ${detail}`,
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 3. SESI SORTIR — foto sudah dipindah + status lanjutan
+// ---------------------------------------------------------------------------
+export async function getSortirSessionAction(bookingId: string): Promise<{
+  movedPhotos: DrivePhoto[];
+  movedFileIds: string[];
+  moveStatus: "in_progress" | "completed" | null;
+}> {
+  try {
+    const { data: booking } = await supabaseAdmin
+      .from("bookings")
+      .select("notes")
+      .eq("id", bookingId)
+      .single();
+
+    const sortirNotes = parseSortirNotes(booking?.notes);
+    const drivePhotos = await listMovedPhotosForBooking(bookingId);
+    const driveIds = drivePhotos.map((photo) => photo.id);
+    const notesIds = sortirNotes?.movedFileIds ?? sortirNotes?.selectedFileIds ?? [];
+    const mergedIds = [...new Set([...notesIds, ...driveIds])];
+
+    const moveStatus =
+      sortirNotes?.moveStatus ??
+      (mergedIds.length > 0 ? "in_progress" : null);
+
+    return {
+      movedPhotos: drivePhotos,
+      movedFileIds: mergedIds,
+      moveStatus: moveStatus === "completed" ? "completed" : mergedIds.length > 0 ? "in_progress" : null,
+    };
+  } catch (error) {
+    console.error("Gagal mengambil sesi sortir:", error);
+    return { movedPhotos: [], movedFileIds: [], moveStatus: null };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 4. PINDAH SATU FOTO — dengan progress inkremental
+// ---------------------------------------------------------------------------
+export async function moveSinglePhotoAction(
+  bookingId: string,
+  clientName: string,
+  fileId: string,
+  originalFolderLink: string,
+  maxPhotos: number
+): Promise<{
+  success: boolean;
+  message?: string;
+  movedCount?: number;
+  movedFileIds?: string[];
+  moveStatus?: "in_progress" | "completed";
+}> {
+  try {
+    const targetFolderId = getCentralSortirFolderId();
+    if (!targetFolderId) {
+      return {
+        success: false,
+        message: "Folder sortiran belum dikonfigurasi di server. Hubungi admin Maeng Studio.",
+      };
+    }
+
+    const sourceFolderId = extractFolderId(originalFolderLink);
+    const session = await getSortirSessionAction(bookingId);
+    const currentMoved = session.movedFileIds;
+
+    if (currentMoved.includes(fileId)) {
+      return {
+        success: true,
+        movedCount: currentMoved.length,
+        movedFileIds: currentMoved,
+        moveStatus: currentMoved.length >= maxPhotos ? "completed" : "in_progress",
+      };
+    }
+
+    if (currentMoved.length >= maxPhotos) {
+      return {
+        success: false,
+        message: `Sudah mencapai batas ${maxPhotos} foto. Tidak bisa memindahkan foto lagi.`,
+      };
+    }
+
+    await moveSelectedFileToFolder(
+      fileId,
+      sourceFolderId,
+      targetFolderId,
+      bookingId,
+      clientName
+    );
+
+    const movedFileIds = [...currentMoved, fileId];
+    await persistSortirProgress(
+      bookingId,
+      clientName,
+      sourceFolderId,
+      targetFolderId,
+      movedFileIds,
+      maxPhotos
+    );
+
+    const moveStatus = movedFileIds.length >= maxPhotos ? "completed" : "in_progress";
+
+    return {
+      success: true,
+      movedCount: movedFileIds.length,
+      movedFileIds,
+      moveStatus,
+    };
+  } catch (error) {
+    console.error("Gagal memindahkan foto:", error);
+    const detail = error instanceof Error ? error.message : "Kesalahan tidak diketahui";
+    return {
+      success: false,
+      message: `Gagal memindahkan foto: ${detail}`,
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 5. KEMBALIKAN FOTO KE FOLDER ASAL
+// ---------------------------------------------------------------------------
+export async function revertMovedPhotoAction(
+  bookingId: string,
+  clientName: string,
+  fileId: string,
+  originalFolderLink: string,
+  maxPhotos: number
+): Promise<{
+  success: boolean;
+  message?: string;
+  movedCount?: number;
+  movedFileIds?: string[];
+}> {
+  try {
+    const targetFolderId = getCentralSortirFolderId();
+    if (!targetFolderId) {
+      return {
+        success: false,
+        message: "Folder sortiran belum dikonfigurasi di server.",
+      };
+    }
+
+    const sourceFolderId = extractFolderId(originalFolderLink);
+    const session = await getSortirSessionAction(bookingId);
+
+    if (!session.movedFileIds.includes(fileId)) {
+      return {
+        success: false,
+        message: "Foto ini tidak ditemukan di daftar foto yang sudah dipindahkan.",
+      };
+    }
+
+    await revertMovedFileToSource(fileId, sourceFolderId, targetFolderId, clientName);
+
+    const movedFileIds = session.movedFileIds.filter((id) => id !== fileId);
+    await persistSortirProgress(
+      bookingId,
+      clientName,
+      sourceFolderId,
+      targetFolderId,
+      movedFileIds,
+      maxPhotos
+    );
+
+    return {
+      success: true,
+      movedCount: movedFileIds.length,
+      movedFileIds,
+    };
+  } catch (error) {
+    console.error("Gagal mengembalikan foto:", error);
+    const detail = error instanceof Error ? error.message : "Kesalahan tidak diketahui";
+    return {
+      success: false,
+      message: `Gagal mengembalikan foto: ${detail}`,
     };
   }
 }

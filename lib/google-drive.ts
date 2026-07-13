@@ -1,7 +1,13 @@
 import { google } from "googleapis";
 
+export function buildClientPrintFolderName(clientName: string) {
+  const trimmed = clientName.trim() || "Klien";
+  return `cetak file_${trimmed}`.slice(0, 100);
+}
+
+/** @deprecated Gunakan buildClientPrintFolderName */
 export function buildSortirFolderName(clientName: string) {
-  return `foto sortiran_${clientName}`;
+  return buildClientPrintFolderName(clientName);
 }
 
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
