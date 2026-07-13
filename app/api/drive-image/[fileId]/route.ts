@@ -45,18 +45,13 @@ export async function GET(
 ) {
   const { fileId } = await context.params;
   const useThumbnail = request.nextUrl.searchParams.get("thumb") === "1";
-<<<<<<< HEAD
-=======
   const isDownload = request.nextUrl.searchParams.get("download") === "1";
->>>>>>> 8892c2b (perbaikan)
 
   if (!fileId) {
     return NextResponse.json({ error: "File ID required" }, { status: 400 });
   }
 
   try {
-<<<<<<< HEAD
-=======
     let fileName = `foto-${fileId}`;
 
     if (isDownload) {
@@ -68,7 +63,6 @@ export async function GET(
       if (meta.data.name) fileName = meta.data.name;
     }
 
->>>>>>> 8892c2b (perbaikan)
     const image = useThumbnail
       ? (await fetchThumbnail(fileId)) ?? (await fetchFullImage(fileId))
       : await fetchFullImage(fileId);
@@ -77,12 +71,9 @@ export async function GET(
       headers: {
         "Content-Type": image.mimeType,
         "Cache-Control": "private, max-age=86400",
-<<<<<<< HEAD
-=======
         ...(isDownload && {
           "Content-Disposition": `attachment; filename="${encodeURIComponent(fileName)}"`,
         }),
->>>>>>> 8892c2b (perbaikan)
       },
     });
   } catch (error) {

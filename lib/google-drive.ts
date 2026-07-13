@@ -2,9 +2,6 @@ import { google } from "googleapis";
 
 export function buildClientPrintFolderName(clientName: string) {
   const trimmed = clientName.trim() || "Klien";
-<<<<<<< HEAD
-  return `cetak file_${trimmed}`.slice(0, 100);
-=======
   return `Foto Cetak_${trimmed}`.slice(0, 100);
 }
 
@@ -41,7 +38,6 @@ export async function getOrCreateClientPrintFolder(
   }
 
   return created.data.id;
->>>>>>> 8892c2b (perbaikan)
 }
 
 /** @deprecated Gunakan buildClientPrintFolderName */
