@@ -1,0 +1,120 @@
+.
+├── AGENTS.md
+├── app
+│   ├── actions
+│   │   ├── adminBookings
+│   │   │   ├── coreActions.ts
+│   │   │   ├── index.ts
+│   │   │   ├── transactionActions.ts
+│   │   │   └── utils.ts
+│   │   ├── authActions.ts
+│   │   ├── auth.ts
+│   │   ├── bookingCalendarActions.ts
+│   │   ├── booking.ts
+│   │   ├── driveActions.ts
+│   │   ├── leadsActions.ts
+│   │   ├── packages.ts
+│   │   └── publicActions.ts
+│   ├── apple-icon.tsx
+│   ├── cek-nota
+│   │   └── page.tsx
+│   ├── components
+│   │   ├── bookingCalendar
+│   │   │   ├── AdminBookingCalendarPanel.tsx
+│   │   │   ├── BookingMonthGrid.tsx
+│   │   │   ├── calendarMonthLayout.ts
+│   │   │   ├── EventDateAvailabilityHint.tsx
+│   │   │   └── PublicBookingCalendarSection.tsx
+│   │   └── PWARegister.tsx
+│   ├── (Dashboard)
+│   │   ├── admin
+│   │   │   ├── bookings
+│   │   │   │   └── page.tsx
+│   │   │   ├── components
+│   │   │   │   ├── AdminBookingForm.tsx
+│   │   │   │   ├── AdminBookingsTable.tsx
+│   │   │   │   ├── AdminPackages.tsx
+│   │   │   │   ├── AlertModal.tsx
+│   │   │   │   ├── bookingReceipt
+│   │   │   │   │   ├── buildPackageLineItems.ts
+│   │   │   │   │   ├── buildThermalReceiptHtml.ts
+│   │   │   │   │   ├── openBrowserPrintReceipt.ts
+│   │   │   │   │   └── receiptTypes.ts
+│   │   │   │   ├── BookingTable.tsx
+│   │   │   │   ├── EditBookingModal.tsx
+│   │   │   │   ├── LeadForm.tsx
+│   │   │   │   ├── LeadTable.tsx
+│   │   │   │   ├── PackageCard.tsx
+│   │   │   │   ├── PackageForm.tsx
+│   │   │   │   ├── PaymentModal.tsx
+│   │   │   │   ├── ProcessPickupModal.tsx
+│   │   │   │   ├── Sidebar.tsx
+│   │   │   │   ├── thermalBluetooth
+│   │   │   │   │   ├── buildThermalReceiptEscPos.ts
+│   │   │   │   │   ├── escposBytes.ts
+│   │   │   │   │   └── sendBytesToBleThermalPrinter.ts
+│   │   │   │   ├── ThermalReceiptPrintModal.tsx
+│   │   │   │   ├── types.ts
+│   │   │   │   └── utils.ts
+│   │   │   ├── dashboard
+│   │   │   │   └── page.tsx
+│   │   │   ├── layout.tsx
+│   │   │   ├── leads
+│   │   │   │   └── page.tsx
+│   │   │   └── packages
+│   │   │       └── page.tsx
+│   │   └── client
+│   │       └── profile
+│   │           ├── components
+│   │           │   ├── TabNewBooking.tsx
+│   │           │   └── TabOverview.tsx
+│   │           ├── layout.tsx
+│   │           └── page.tsx
+│   ├── favicon.ico
+│   ├── forgot-password
+│   │   └── page.tsx
+│   ├── globals.css
+│   ├── icon.tsx
+│   ├── layout.tsx
+│   ├── login
+│   │   └── page.tsx
+│   ├── manifest.ts
+│   ├── page.tsx
+│   ├── register
+│   │   └── page.tsx
+│   └── sortir
+│       └── [bookingId]
+│           └── page.tsx
+├── CLAUDE.md
+├── eslint.config.mjs
+├── lib
+│   ├── auth-guard.ts
+│   ├── bookingCalendar
+│   │   ├── buildAdminCalendarDayEntries.ts
+│   │   ├── buildBookingIdsByDate.ts
+│   │   ├── buildPublicDaySummaries.ts
+│   │   ├── constants.ts
+│   │   ├── extractDateKeysFromEventDetails.ts
+│   │   ├── normalizeDateKey.ts
+│   │   └── validateDatesAgainstCapacity.ts
+│   └── maeng-device-cookie.ts
+├── next.config.js
+├── next-env.d.ts
+├── package.json
+├── package-lock.json
+├── postcss.config.mjs
+├── proxy.ts
+├── public
+│   ├── file.svg
+│   ├── globe.svg
+│   ├── next.svg
+│   ├── sw.js
+│   ├── vercel.svg
+│   └── window.svg
+├── README.md
+├── struktur.txt
+├── tsconfig.json
+├── tsconfig.tsbuildinfo
+└── types
+
+28 directories, 90 files

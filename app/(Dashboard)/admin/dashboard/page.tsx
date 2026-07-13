@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ShieldAlert, Search, Loader2, X, ReceiptText, TrendingUp, Users } from "lucide-react";
+// --- TAMBAHAN: Import Send dan LinkIcon dari lucide-react ---
+import { ShieldAlert, Search, Loader2, X, ReceiptText, TrendingUp, Users, Link as LinkIcon, Send } from "lucide-react";
 import { getAdminBookingsAction } from "@/app/actions/adminBookings";
 import { getLeadsAction } from "@/app/actions/leadsActions"; // <-- Import sudah disesuaikan
 import AdminBookingCalendarPanel from "@/app/components/bookingCalendar/AdminBookingCalendarPanel";
+import { getAppBaseUrl } from "@/lib/app-url";
 
 // Fungsi Helper Format Rupiah
 function formatRupiah(value: number) {
@@ -41,6 +43,37 @@ export default function AdminDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // =====================================================================
+  // --- TAMBAHAN: STATE & FUNGSI BARU UNTUK FITUR SORTIR FOTO KLIEN ---
+  // =====================================================================
+  const [adminInputs, setAdminInputs] = useState<Record<string, { link: string; albumType: string; maxPhotos: number }>>({});
+
+  const handleInputChange = (bookingId: string, field: string, value: string) => {
+    setAdminInputs((prev) => {
+      const current = prev[bookingId] || { link: "", albumType: "10_sheet", maxPhotos: 60 };
+      let maxPhotos = current.maxPhotos;
+      if (field === "albumType") {
+        maxPhotos = value === "10_sheet" ? 60 : 70;
+      }
+      return { ...prev, [bookingId]: { ...current, [field]: value, maxPhotos } };
+    });
+  };
+
+  const handleKirimLink = async (bookingId: string, clientName: string) => {
+    const inputData = adminInputs[bookingId];
+    if (!inputData || !inputData.link) {
+      return alert("Harap masukkan link Google Drive terlebih dahulu!");
+    }
+    
+    const baseUrl = getAppBaseUrl();
+    const clientPortalUrl = `${baseUrl}/sortir/${bookingId}?drive=${encodeURIComponent(inputData.link)}&max=${inputData.maxPhotos}&name=${encodeURIComponent(clientName)}`;
+    
+    const textWa = `Halo kak ${clientName},\n\nBerikut link folder untuk melihat galeri foto mentah: ${inputData.link}\n\nKakak mendapat paket Cetak ${inputData.albumType === "10_sheet" ? "10 Sheet" : "15 Sheet"} (Maksimal ${inputData.maxPhotos} foto).\n\nSilakan pilih foto langsung melalui galeri interaktif kami di link berikut:\n${clientPortalUrl}\n\nTerima kasih!`;
+    
+    window.open(`https://wa.me/?text=${encodeURIComponent(textWa)}`, '_blank');
+  };
+  // =====================================================================
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -328,26 +361,33 @@ export default function AdminDashboardPage() {
               </div>
 
               <div className="p-2">
-                {filteredBookings.length === 0 ? (
-                  <div className="text-center py-12 text-white/40 text-sm">
-                    Tidak ada pesanan di kategori ini.
-                  </div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                      <thead className="text-white/40 uppercase text-[10px] tracking-wider border-b border-white/5">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-white/40 uppercase text-[10px] tracking-wider border-b border-white/5">
+                      <tr>
+                        <th className="px-6 py-4">Nomor Nota</th>
+                        <th className="px-6 py-4">Nama Klien</th>
+                        <th className="px-6 py-4">Paket</th>
+                        <th className="px-6 py-4 text-right">Info Pembayaran</th>
+                        {/* --- TAMBAHAN: KOLOM HEADER BARU UNTUK FITUR SORTIR --- */}
+                        <th className="px-6 py-4 text-center border-l border-white/5">Aksi (Sortir Foto)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredBookings.length === 0 ? (
                         <tr>
-                          <th className="px-6 py-4">Nomor Nota</th>
-                          <th className="px-6 py-4">Nama Klien</th>
-                          <th className="px-6 py-4">Paket</th>
-                          <th className="px-6 py-4 text-right">Info Pembayaran</th>
+                          <td colSpan={5} className="text-center py-12 text-white/40 text-sm">
+                            Tidak ada pesanan di kategori ini.
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {filteredBookings.map((b) => {
+                      ) : (
+                        filteredBookings.map((b) => {
                           const total = b.invoice?.total_amount || 0;
                           const paid = b.invoice?.paid_amount || 0;
                           const sisa = Math.max(total - paid, 0);
+                          
+                          // --- TAMBAHAN: MENGAMBIL DATA INPUT ADMIN SAAT INI UNTUK BARIS INI ---
+                          const inputData = adminInputs[b.id] || { link: "", albumType: "10_sheet", maxPhotos: 60 };
 
                           return (
                             <tr key={b.id} className="border-b border-white/5 hover:bg-white/[0.02] group">
@@ -364,13 +404,45 @@ export default function AdminDashboardPage() {
                                   </div>
                                 )}
                               </td>
+                              
+                              {/* --- TAMBAHAN: FORM INPUT DAN TOMBOL KIRIM UNTUK ADMIN --- */}
+                              <td className="px-4 py-3 border-l border-white/5">
+                                <div className="flex flex-col gap-2 max-w-[250px] mx-auto">
+                                  <select 
+                                    value={inputData.albumType}
+                                    onChange={(e) => handleInputChange(b.id, "albumType", e.target.value)}
+                                    className="bg-black/50 border border-white/10 rounded-lg py-1.5 px-3 text-[11px] text-white focus:border-amber-500 outline-none"
+                                  >
+                                    <option value="10_sheet">Kolase 10 Sheet (Max 60 Foto)</option>
+                                    <option value="15_sheet">Kolase 15 Sheet (Max 70 Foto)</option>
+                                  </select>
+                                  <div className="flex gap-2">
+                                    <input
+                                      type="url"
+                                      placeholder="Paste Link G-Drive..."
+                                      value={inputData.link}
+                                      onChange={(e) => handleInputChange(b.id, "link", e.target.value)}
+                                      className="w-full bg-black/50 border border-white/10 rounded-lg py-1.5 px-3 text-[11px] text-white focus:border-blue-500 outline-none"
+                                    />
+                                    <button
+                                      onClick={() => handleKirimLink(b.id, b.client_name)}
+                                      className="bg-blue-600 hover:bg-blue-500 text-white p-1.5 px-3 rounded-lg flex items-center justify-center transition-colors"
+                                      title="Generate & Kirim Link WA"
+                                    >
+                                      <Send className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </td>
+                              {/* --- AKHIR DARI TAMBAHAN FITUR SORTIR --- */}
+
                             </tr>
                           );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
