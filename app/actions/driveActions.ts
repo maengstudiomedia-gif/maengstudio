@@ -4,6 +4,10 @@ import {
   drive,
   extractFolderId,
   getCentralSortirFolderId,
+<<<<<<< HEAD
+=======
+  getOrCreateClientPrintFolder,
+>>>>>>> 8892c2b (perbaikan)
   hasServiceAccountDriveConfig,
 } from "@/lib/google-drive";
 import { supabaseAdmin, mergeBookingNotesPatch } from "@/app/actions/adminBookings/utils";
@@ -19,6 +23,10 @@ type DrivePhoto = {
 type SortirNotes = {
   clientName?: string;
   folderId?: string;
+<<<<<<< HEAD
+=======
+  clientFolderId?: string;
+>>>>>>> 8892c2b (perbaikan)
   sourceFolderId?: string;
   selectedFileIds?: string[];
   movedFileIds?: string[];
@@ -110,7 +118,10 @@ async function moveSelectedFileToFolder(
 async function revertMovedFileToSource(
   fileId: string,
   sourceFolderId: string,
+<<<<<<< HEAD
   targetFolderId: string,
+=======
+>>>>>>> 8892c2b (perbaikan)
   clientName: string
 ) {
   const file = await drive.files.get({
@@ -124,6 +135,11 @@ async function revertMovedFileToSource(
     return;
   }
 
+<<<<<<< HEAD
+=======
+  const removeParents = parents.filter((parentId) => parentId !== sourceFolderId).join(",");
+
+>>>>>>> 8892c2b (perbaikan)
   const prefix = `${clientName} - `;
   const storedOriginal = file.data.appProperties?.maeng_sortir_original_name;
   const originalName =
@@ -134,7 +150,11 @@ async function revertMovedFileToSource(
   await drive.files.update({
     fileId,
     addParents: sourceFolderId,
+<<<<<<< HEAD
     removeParents: targetFolderId,
+=======
+    ...(removeParents ? { removeParents } : {}),
+>>>>>>> 8892c2b (perbaikan)
     requestBody: {
       name: originalName.slice(0, 240),
       appProperties: {
@@ -150,11 +170,16 @@ async function revertMovedFileToSource(
 }
 
 async function listMovedPhotosForBooking(bookingId: string): Promise<DrivePhoto[]> {
+<<<<<<< HEAD
   const targetFolderId = getCentralSortirFolderId();
   if (!targetFolderId) return [];
 
   const response = await drive.files.list({
     q: `'${targetFolderId}' in parents and mimeType contains 'image/' and trashed = false and appProperties has { key='maeng_sortir_booking' and value='${bookingId}' }`,
+=======
+  const response = await drive.files.list({
+    q: `mimeType contains 'image/' and trashed = false and appProperties has { key='maeng_sortir_booking' and value='${bookingId}' }`,
+>>>>>>> 8892c2b (perbaikan)
     fields: "files(id, name, imageMediaMetadata)",
     pageSize: 500,
     supportsAllDrives: true,
@@ -166,11 +191,37 @@ async function listMovedPhotosForBooking(bookingId: string): Promise<DrivePhoto[
     .filter((photo): photo is DrivePhoto => photo !== null);
 }
 
+<<<<<<< HEAD
+=======
+async function resolveClientPrintFolderId(
+  centralFolderId: string,
+  clientName: string,
+  bookingId: string
+): Promise<string> {
+  const { data: booking } = await supabaseAdmin
+    .from("bookings")
+    .select("notes")
+    .eq("id", bookingId)
+    .single();
+
+  const existing = parseSortirNotes(booking?.notes);
+  if (existing?.clientFolderId) {
+    return existing.clientFolderId;
+  }
+
+  return getOrCreateClientPrintFolder(centralFolderId, clientName);
+}
+
+>>>>>>> 8892c2b (perbaikan)
 async function persistSortirProgress(
   bookingId: string,
   clientName: string,
   sourceFolderId: string,
   sortirFolderId: string,
+<<<<<<< HEAD
+=======
+  clientFolderId: string,
+>>>>>>> 8892c2b (perbaikan)
   movedFileIds: string[],
   maxPhotos: number
 ) {
@@ -187,6 +238,10 @@ async function persistSortirProgress(
     sortir: {
       clientName,
       folderId: sortirFolderId,
+<<<<<<< HEAD
+=======
+      clientFolderId,
+>>>>>>> 8892c2b (perbaikan)
       sourceFolderId,
       movedFileIds,
       selectedFileIds: movedFileIds,
@@ -205,6 +260,10 @@ async function persistSelectionToBooking(
   clientName: string,
   selectedFileIds: string[],
   sortirFolderId: string,
+<<<<<<< HEAD
+=======
+  clientFolderId: string,
+>>>>>>> 8892c2b (perbaikan)
   sourceFolderId: string
 ) {
   await persistSortirProgress(
@@ -212,6 +271,10 @@ async function persistSelectionToBooking(
     clientName,
     sourceFolderId,
     sortirFolderId,
+<<<<<<< HEAD
+=======
+    clientFolderId,
+>>>>>>> 8892c2b (perbaikan)
     selectedFileIds,
     selectedFileIds.length
   );
@@ -323,12 +386,24 @@ export async function submitClientSelectionAction(
     }
 
     const sourceFolderId = extractFolderId(originalFolderLink);
+<<<<<<< HEAD
+=======
+    const clientFolderId = await resolveClientPrintFolderId(
+      targetFolderId,
+      clientName,
+      bookingId
+    );
+>>>>>>> 8892c2b (perbaikan)
 
     for (const fileId of selectedFileIds) {
       await moveSelectedFileToFolder(
         fileId,
         sourceFolderId,
+<<<<<<< HEAD
         targetFolderId,
+=======
+        clientFolderId,
+>>>>>>> 8892c2b (perbaikan)
         bookingId,
         clientName
       );
@@ -339,6 +414,10 @@ export async function submitClientSelectionAction(
       clientName,
       selectedFileIds,
       targetFolderId,
+<<<<<<< HEAD
+=======
+      clientFolderId,
+>>>>>>> 8892c2b (perbaikan)
       sourceFolderId
     );
 
@@ -415,6 +494,14 @@ export async function moveSinglePhotoAction(
     }
 
     const sourceFolderId = extractFolderId(originalFolderLink);
+<<<<<<< HEAD
+=======
+    const clientFolderId = await resolveClientPrintFolderId(
+      targetFolderId,
+      clientName,
+      bookingId
+    );
+>>>>>>> 8892c2b (perbaikan)
     const session = await getSortirSessionAction(bookingId);
     const currentMoved = session.movedFileIds;
 
@@ -437,7 +524,11 @@ export async function moveSinglePhotoAction(
     await moveSelectedFileToFolder(
       fileId,
       sourceFolderId,
+<<<<<<< HEAD
       targetFolderId,
+=======
+      clientFolderId,
+>>>>>>> 8892c2b (perbaikan)
       bookingId,
       clientName
     );
@@ -448,6 +539,10 @@ export async function moveSinglePhotoAction(
       clientName,
       sourceFolderId,
       targetFolderId,
+<<<<<<< HEAD
+=======
+      clientFolderId,
+>>>>>>> 8892c2b (perbaikan)
       movedFileIds,
       maxPhotos
     );
@@ -504,7 +599,21 @@ export async function revertMovedPhotoAction(
       };
     }
 
+<<<<<<< HEAD
     await revertMovedFileToSource(fileId, sourceFolderId, targetFolderId, clientName);
+=======
+    const { data: booking } = await supabaseAdmin
+      .from("bookings")
+      .select("notes")
+      .eq("id", bookingId)
+      .single();
+    const sortirNotes = parseSortirNotes(booking?.notes);
+    const clientFolderId =
+      sortirNotes?.clientFolderId ??
+      (await resolveClientPrintFolderId(targetFolderId, clientName, bookingId));
+
+    await revertMovedFileToSource(fileId, sourceFolderId, clientName);
+>>>>>>> 8892c2b (perbaikan)
 
     const movedFileIds = session.movedFileIds.filter((id) => id !== fileId);
     await persistSortirProgress(
@@ -512,6 +621,10 @@ export async function revertMovedPhotoAction(
       clientName,
       sourceFolderId,
       targetFolderId,
+<<<<<<< HEAD
+=======
+      clientFolderId,
+>>>>>>> 8892c2b (perbaikan)
       movedFileIds,
       maxPhotos
     );

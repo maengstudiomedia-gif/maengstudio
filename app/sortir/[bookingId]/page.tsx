@@ -5,11 +5,19 @@ import { useSearchParams } from "next/navigation";
 import {
   Loader2,
   CheckCircle2,
+<<<<<<< HEAD
   Maximize2,
+=======
+>>>>>>> 8892c2b (perbaikan)
   X,
   Check,
   FolderCheck,
   Undo2,
+<<<<<<< HEAD
+=======
+  Eye,
+  Download,
+>>>>>>> 8892c2b (perbaikan)
 } from "lucide-react";
 import {
   getPhotosFromDriveAction,
@@ -55,6 +63,10 @@ export default function ClientGalleryPortal({
   const [revertingId, setRevertingId] = useState<string | null>(null);
   const [confirmRevertId, setConfirmRevertId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+<<<<<<< HEAD
+=======
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+>>>>>>> 8892c2b (perbaikan)
 
   const movedCount = movedFileIds.length;
   const totalCommitted = movedCount + selectedIds.length;
@@ -110,6 +122,30 @@ export default function ClientGalleryPortal({
     });
   };
 
+<<<<<<< HEAD
+=======
+  const handleDownload = async (photo: Photo) => {
+    setDownloadingId(photo.id);
+    try {
+      const response = await fetch(`${photo.url}?download=1`);
+      if (!response.ok) throw new Error("Download failed");
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = photo.name;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+    } catch {
+      setErrorMessage("Gagal mengunduh foto. Silakan coba lagi.");
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+>>>>>>> 8892c2b (perbaikan)
   const runSubmit = async () => {
     const idsToMove = [...selectedIds];
     const initialMovedCount = movedFileIds.length;
@@ -239,7 +275,12 @@ export default function ClientGalleryPortal({
           <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
           <h2 className="text-2xl font-light text-white mb-2">Terima Kasih, {clientName}!</h2>
           <p className="text-white/60 text-sm mb-6">
+<<<<<<< HEAD
             {movedCount || maxPhotos} foto telah berhasil dipindahkan ke folder sortiran Maeng Studio.
+=======
+            {movedCount || maxPhotos} foto telah berhasil dipindahkan ke folder{" "}
+            <span className="text-emerald-400/90">Foto Cetak_{clientName}</span> di Maeng Studio.
+>>>>>>> 8892c2b (perbaikan)
           </p>
         </div>
       </div>
@@ -322,6 +363,10 @@ export default function ClientGalleryPortal({
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
             {photos.map((photo) => {
               const isSelected = selectedIds.includes(photo.id);
+<<<<<<< HEAD
+=======
+              const isDownloading = downloadingId === photo.id;
+>>>>>>> 8892c2b (perbaikan)
               const aspectClass =
                 photo.orientation === "landscape"
                   ? "aspect-[4/3]"
@@ -332,23 +377,36 @@ export default function ClientGalleryPortal({
               return (
                 <div
                   key={photo.id}
+<<<<<<< HEAD
                   className={`relative ${aspectClass} group cursor-pointer overflow-hidden rounded-xl border-2 transition-all duration-200 ${
                     isSelected
                       ? "border-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)]"
                       : "border-white/5 hover:border-white/20"
                   }`}
                   onClick={() => togglePhotoSelection(photo.id)}
+=======
+                  className={`relative ${aspectClass} group overflow-hidden rounded-xl border-2 transition-all duration-200 ${
+                    isSelected
+                      ? "border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.35)] ring-1 ring-amber-500/30"
+                      : "border-white/5 hover:border-white/20"
+                  }`}
+>>>>>>> 8892c2b (perbaikan)
                 >
                   <img
                     src={photo.thumbnail}
                     alt={photo.name}
                     className={`w-full h-full object-cover transition-transform duration-500 ${
+<<<<<<< HEAD
                       isSelected ? "scale-105 opacity-80" : "group-hover:scale-110"
+=======
+                      isSelected ? "scale-105" : "group-hover:scale-105"
+>>>>>>> 8892c2b (perbaikan)
                     }`}
                     loading="lazy"
                   />
 
                   {isSelected && (
+<<<<<<< HEAD
                     <div className="absolute top-2 right-2 bg-amber-500 text-black p-1 rounded-full z-10">
                       <Check className="w-4 h-4 font-bold" />
                     </div>
@@ -367,6 +425,53 @@ export default function ClientGalleryPortal({
                   >
                     <Maximize2 className="w-4 h-4" />
                   </button>
+=======
+                    <div className="absolute top-2 right-2 bg-amber-500 text-black p-1.5 rounded-full z-10 shadow-lg">
+                      <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    </div>
+                  )}
+
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/20 to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity duration-200" />
+
+                  <div className="absolute bottom-0 inset-x-0 p-2.5 space-y-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 transition-opacity duration-200">
+                    <p className="text-[9px] text-white/70 font-mono truncate px-0.5">{photo.name}</p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setZoomedPhoto(photo)}
+                        className="flex flex-col items-center justify-center gap-0.5 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white text-[9px] font-medium py-2 rounded-lg transition-colors"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        Lihat
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDownload(photo)}
+                        disabled={isDownloading}
+                        className="flex flex-col items-center justify-center gap-0.5 bg-white/10 hover:bg-white/20 backdrop-blur-md text-white text-[9px] font-medium py-2 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        {isDownloading ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Download className="w-3.5 h-3.5" />
+                        )}
+                        Unduh
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => togglePhotoSelection(photo.id)}
+                        className={`flex flex-col items-center justify-center gap-0.5 backdrop-blur-md text-[9px] font-medium py-2 rounded-lg transition-colors ${
+                          isSelected
+                            ? "bg-amber-500 text-black hover:bg-amber-400"
+                            : "bg-amber-500/20 text-amber-300 hover:bg-amber-500 hover:text-black border border-amber-500/40"
+                        }`}
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        {isSelected ? "Batal" : "Pilih"}
+                      </button>
+                    </div>
+                  </div>
+>>>>>>> 8892c2b (perbaikan)
                 </div>
               );
             })}
@@ -460,6 +565,7 @@ export default function ClientGalleryPortal({
                       className="w-full h-full object-cover"
                       loading="lazy"
                     />
+<<<<<<< HEAD
                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                     <div className="absolute bottom-0 inset-x-0 p-2 space-y-1.5">
                       <p className="text-[9px] text-white/70 font-mono truncate">{photo.name}</p>
@@ -475,6 +581,47 @@ export default function ClientGalleryPortal({
                         )}
                         Kembalikan
                       </button>
+=======
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute bottom-0 inset-x-0 p-2 space-y-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                      <p className="text-[9px] text-white/70 font-mono truncate">{photo.name}</p>
+                      <div className="grid grid-cols-3 gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setZoomedPhoto(photo)}
+                          className="flex items-center justify-center gap-1 bg-white/10 hover:bg-white/20 text-white text-[9px] py-1.5 rounded-lg transition-colors backdrop-blur-sm"
+                        >
+                          <Eye className="w-3 h-3" />
+                          Lihat
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleDownload(photo)}
+                          disabled={downloadingId === photo.id}
+                          className="flex items-center justify-center gap-1 bg-white/10 hover:bg-white/20 text-white text-[9px] py-1.5 rounded-lg transition-colors backdrop-blur-sm disabled:opacity-50"
+                        >
+                          {downloadingId === photo.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Download className="w-3 h-3" />
+                          )}
+                          Unduh
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmRevertId(photo.id)}
+                          disabled={revertingId === photo.id || isSubmitting}
+                          className="flex items-center justify-center gap-1 bg-rose-500/20 hover:bg-rose-500/80 disabled:opacity-50 text-rose-200 hover:text-white text-[9px] py-1.5 rounded-lg transition-colors backdrop-blur-sm"
+                        >
+                          {revertingId === photo.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Undo2 className="w-3 h-3" />
+                          )}
+                          Batal
+                        </button>
+                      </div>
+>>>>>>> 8892c2b (perbaikan)
                     </div>
                   </div>
                 ))}
@@ -503,6 +650,7 @@ export default function ClientGalleryPortal({
           <img
             src={zoomedPhoto.url}
             alt={zoomedPhoto.name}
+<<<<<<< HEAD
             className="max-w-full max-h-[75vh] object-contain rounded-lg shadow-2xl"
           />
           <p className="text-white mt-4 font-mono">{zoomedPhoto.name}</p>
@@ -526,6 +674,52 @@ export default function ClientGalleryPortal({
               </>
             )}
           </button>
+=======
+            className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-2xl"
+          />
+          <p className="text-white/80 mt-4 font-mono text-sm max-w-lg truncate px-4">
+            {zoomedPhoto.name}
+          </p>
+
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => void handleDownload(zoomedPhoto)}
+              disabled={downloadingId === zoomedPhoto.id}
+              className="px-5 py-3 rounded-xl font-medium flex items-center gap-2 bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-50"
+            >
+              {downloadingId === zoomedPhoto.id ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Download className="w-5 h-5" />
+              )}
+              Unduh Foto
+            </button>
+
+            {!movedFileIds.includes(zoomedPhoto.id) && (
+              <button
+                type="button"
+                onClick={() => {
+                  togglePhotoSelection(zoomedPhoto.id);
+                  setZoomedPhoto(null);
+                }}
+                className={`px-5 py-3 rounded-xl font-medium flex items-center gap-2 transition-colors ${
+                  selectedIds.includes(zoomedPhoto.id)
+                    ? "bg-rose-500/20 text-rose-400 border border-rose-500/50 hover:bg-rose-500 hover:text-white"
+                    : "bg-amber-500 text-black hover:bg-amber-400"
+                }`}
+              >
+                {selectedIds.includes(zoomedPhoto.id) ? (
+                  <>Batal Pilih</>
+                ) : (
+                  <>
+                    <Check className="w-5 h-5" /> Pilih Foto
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+>>>>>>> 8892c2b (perbaikan)
         </div>
       )}
 

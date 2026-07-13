@@ -2,7 +2,46 @@ import { google } from "googleapis";
 
 export function buildClientPrintFolderName(clientName: string) {
   const trimmed = clientName.trim() || "Klien";
+<<<<<<< HEAD
   return `cetak file_${trimmed}`.slice(0, 100);
+=======
+  return `Foto Cetak_${trimmed}`.slice(0, 100);
+}
+
+/** Buat atau ambil subfolder klien di dalam folder pusat sortiran. */
+export async function getOrCreateClientPrintFolder(
+  parentFolderId: string,
+  clientName: string
+): Promise<string> {
+  const folderName = buildClientPrintFolderName(clientName);
+
+  const response = await drive.files.list({
+    q: `'${parentFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    fields: "files(id, name)",
+    pageSize: 200,
+    supportsAllDrives: true,
+    includeItemsFromAllDrives: true,
+  });
+
+  const existing = (response.data.files ?? []).find((file) => file.name === folderName);
+  if (existing?.id) return existing.id;
+
+  const created = await drive.files.create({
+    requestBody: {
+      name: folderName,
+      mimeType: "application/vnd.google-apps.folder",
+      parents: [parentFolderId],
+    },
+    supportsAllDrives: true,
+    fields: "id",
+  });
+
+  if (!created.data.id) {
+    throw new Error("Gagal membuat subfolder Foto Cetak klien.");
+  }
+
+  return created.data.id;
+>>>>>>> 8892c2b (perbaikan)
 }
 
 /** @deprecated Gunakan buildClientPrintFolderName */
