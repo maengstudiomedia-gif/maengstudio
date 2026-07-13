@@ -37,11 +37,13 @@ async function moveSelectedFileToFolder(
     fileId,
     addParents: targetFolderId,
     ...(removeParents ? { removeParents } : {}),
-    name: nextName,
-    appProperties: {
-      maeng_sortir: "selected",
-      maeng_sortir_client: clientName.slice(0, 100),
-      maeng_sortir_booking: bookingId,
+    requestBody: {
+      name: nextName,
+      appProperties: {
+        maeng_sortir: "selected",
+        maeng_sortir_client: clientName.slice(0, 100),
+        maeng_sortir_booking: bookingId,
+      },
     },
     supportsAllDrives: true,
     fields: "id, parents",
