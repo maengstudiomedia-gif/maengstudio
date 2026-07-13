@@ -117,8 +117,7 @@ export default function ClientGalleryPortal({
           <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
           <h2 className="text-2xl font-light text-white mb-2">Terima Kasih, {clientName}!</h2>
           <p className="text-white/60 text-sm mb-6">
-            {selectedIds.length} foto telah berhasil disimpan dan disalin ke folder cetak
-            (sortiran_{clientName}).
+            {selectedIds.length} foto telah berhasil dipindahkan ke folder sortiran Maeng Studio.
           </p>
         </div>
       </div>

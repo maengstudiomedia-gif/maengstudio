@@ -1,36 +1,115 @@
 "use server";
 
-import { drive, extractFolderId } from "@/lib/google-drive";
+import {
+  drive,
+  extractFolderId,
+  getCentralSortirFolderId,
+  hasServiceAccountDriveConfig,
+} from "@/lib/google-drive";
+import { supabaseAdmin, mergeBookingNotesPatch } from "@/app/actions/adminBookings/utils";
 
-function escapeDriveQueryValue(value: string) {
-  return value.replace(/'/g, "\\'");
-}
-
-async function findOrCreateSortirFolder(parentFolderId: string, clientName: string) {
-  const folderName = `foto sortiran_${clientName}`;
-  const existing = await drive.files.list({
-    q: `'${parentFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and name = '${escapeDriveQueryValue(folderName)}' and trashed = false`,
-    fields: "files(id)",
-    pageSize: 1,
+async function moveSelectedFileToFolder(
+  fileId: string,
+  sourceFolderId: string,
+  targetFolderId: string,
+  bookingId: string,
+  clientName: string
+) {
+  const file = await drive.files.get({
+    fileId,
+    fields: "parents, name",
+    supportsAllDrives: true,
   });
 
-  const existingId = existing.data.files?.[0]?.id;
-  if (existingId) return existingId;
-
-  const created = await drive.files.create({
-    requestBody: {
-      name: folderName,
-      mimeType: "application/vnd.google-apps.folder",
-      parents: [parentFolderId],
-    },
-    fields: "id",
-  });
-
-  if (!created.data.id) {
-    throw new Error("Gagal membuat folder sortiran di Google Drive");
+  const parents = file.data.parents ?? [];
+  if (parents.length === 1 && parents[0] === targetFolderId) {
+    return;
   }
 
-  return created.data.id;
+  const removeParents = parents.includes(sourceFolderId)
+    ? sourceFolderId
+    : parents.filter((parentId) => parentId !== targetFolderId).join(",");
+
+  const originalName = file.data.name || `foto-${fileId}`;
+  const nextName = `${clientName} - ${originalName}`.slice(0, 240);
+
+  await drive.files.update({
+    fileId,
+    addParents: targetFolderId,
+    ...(removeParents ? { removeParents } : {}),
+    name: nextName,
+    appProperties: {
+      maeng_sortir: "selected",
+      maeng_sortir_client: clientName.slice(0, 100),
+      maeng_sortir_booking: bookingId,
+    },
+    supportsAllDrives: true,
+    fields: "id, parents",
+  });
+}
+
+async function persistSelectionToBooking(
+  bookingId: string,
+  clientName: string,
+  selectedFileIds: string[],
+  sortirFolderId: string
+) {
+  const { data: booking } = await supabaseAdmin
+    .from("bookings")
+    .select("notes")
+    .eq("id", bookingId)
+    .single();
+
+  const notes = mergeBookingNotesPatch(booking?.notes, {
+    sortir: {
+      clientName,
+      folderId: sortirFolderId,
+      selectedFileIds,
+      selectedAt: new Date().toISOString(),
+      count: selectedFileIds.length,
+      mode: "move",
+    },
+  });
+
+  await supabaseAdmin.from("bookings").update({ notes }).eq("id", bookingId);
+}
+
+export async function checkGoogleDriveConfigAction(): Promise<{
+  ready: boolean;
+  message: string;
+}> {
+  if (!hasServiceAccountDriveConfig()) {
+    return {
+      ready: false,
+      message: "Service account Google Drive belum dikonfigurasi.",
+    };
+  }
+
+  const centralFolderId = getCentralSortirFolderId();
+  if (!centralFolderId) {
+    return {
+      ready: false,
+      message: "Tambahkan GOOGLE_SORTIR_FOLDER_ID di .env (folder pusat sortiran).",
+    };
+  }
+
+  try {
+    await drive.files.get({
+      fileId: centralFolderId,
+      fields: "id, name",
+      supportsAllDrives: true,
+    });
+    return {
+      ready: true,
+      message: "Google Drive siap (service account + folder sortiran).",
+    };
+  } catch {
+    return {
+      ready: false,
+      message:
+        "Folder sortiran tidak bisa diakses. Share folder ke service account dengan akses Editor.",
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -44,6 +123,8 @@ export async function getPhotosFromDriveAction(folderLink: string) {
       q: `'${folderId}' in parents and mimeType contains 'image/' and trashed = false`,
       fields: "files(id, name, imageMediaMetadata)",
       pageSize: 500,
+      supportsAllDrives: true,
+      includeItemsFromAllDrives: true,
     });
 
     const files = response.data.files || [];
@@ -71,7 +152,7 @@ export async function getPhotosFromDriveAction(folderLink: string) {
 }
 
 // ---------------------------------------------------------------------------
-// 2. FUNGSI COPY FOTO SORTIRAN (Dipanggil saat Klien klik "Simpan Pilihan")
+// 2. FUNGSI SIMPAN SORTIRAN — pindah foto ke folder pusat (tanpa OAuth)
 // ---------------------------------------------------------------------------
 export async function submitClientSelectionAction(
   bookingId: string,
@@ -89,20 +170,28 @@ export async function submitClientSelectionAction(
       };
     }
 
+    const targetFolderId = getCentralSortirFolderId();
+    if (!targetFolderId) {
+      return {
+        success: false,
+        message:
+          "Folder sortiran belum dikonfigurasi di server. Hubungi admin Maeng Studio.",
+      };
+    }
+
     const sourceFolderId = extractFolderId(originalFolderLink);
-    const targetFolderId = await findOrCreateSortirFolder(sourceFolderId, clientName);
 
     for (const fileId of selectedFileIds) {
-      const fileInfo = await drive.files.get({ fileId, fields: "name" });
-
-      await drive.files.copy({
+      await moveSelectedFileToFolder(
         fileId,
-        requestBody: {
-          parents: [targetFolderId],
-          name: fileInfo.data.name || `foto-${fileId}`,
-        },
-      });
+        sourceFolderId,
+        targetFolderId,
+        bookingId,
+        clientName
+      );
     }
+
+    await persistSelectionToBooking(bookingId, clientName, selectedFileIds, targetFolderId);
 
     return { success: true };
   } catch (error) {
@@ -110,7 +199,7 @@ export async function submitClientSelectionAction(
     const detail = error instanceof Error ? error.message : "Kesalahan tidak diketahui";
     return {
       success: false,
-      message: `Gagal menyalin file di Google Drive: ${detail}`,
+      message: `Gagal menyimpan pilihan foto: ${detail}`,
     };
   }
 }

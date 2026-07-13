@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ShieldAlert, Search, Loader2, X, ReceiptText, TrendingUp, Users, Link as LinkIcon, Send } from "lucide-react";
 import { getAdminBookingsAction } from "@/app/actions/adminBookings";
 import { getLeadsAction } from "@/app/actions/leadsActions"; // <-- Import sudah disesuaikan
+import { checkGoogleDriveConfigAction } from "@/app/actions/driveActions";
 import AdminBookingCalendarPanel from "@/app/components/bookingCalendar/AdminBookingCalendarPanel";
 import { getAppBaseUrl } from "@/lib/app-url";
 
@@ -48,6 +49,11 @@ export default function AdminDashboardPage() {
   // --- TAMBAHAN: STATE & FUNGSI BARU UNTUK FITUR SORTIR FOTO KLIEN ---
   // =====================================================================
   const [adminInputs, setAdminInputs] = useState<Record<string, { link: string; albumType: string; maxPhotos: number }>>({});
+  const [driveStatus, setDriveStatus] = useState<string>("Memeriksa Google Drive...");
+
+  useEffect(() => {
+    checkGoogleDriveConfigAction().then((result) => setDriveStatus(result.message));
+  }, []);
 
   const handleInputChange = (bookingId: string, field: string, value: string) => {
     setAdminInputs((prev) => {
@@ -370,7 +376,10 @@ export default function AdminDashboardPage() {
                         <th className="px-6 py-4">Paket</th>
                         <th className="px-6 py-4 text-right">Info Pembayaran</th>
                         {/* --- TAMBAHAN: KOLOM HEADER BARU UNTUK FITUR SORTIR --- */}
-                        <th className="px-6 py-4 text-center border-l border-white/5">Aksi (Sortir Foto)</th>
+                        <th className="px-6 py-4 text-center border-l border-white/5">
+                          Aksi (Sortir Foto)
+                          <p className="mt-1 text-[10px] font-normal normal-case text-white/40">{driveStatus}</p>
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
