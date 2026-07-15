@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ShieldAlert, Search, Loader2, X, ReceiptText, TrendingUp, Users, Link as LinkIcon, Send } from "lucide-react";
 import { getAdminBookingsAction } from "@/app/actions/adminBookings";
 import { getLeadsAction } from "@/app/actions/leadsActions"; // <-- Import sudah disesuaikan
+import { getPublicPackages } from "@/app/actions/publicActions";
 import { checkGoogleDriveConfigAction } from "@/app/actions/driveActions";
 import AdminBookingCalendarPanel from "@/app/components/bookingCalendar/AdminBookingCalendarPanel";
 import { getAppBaseUrl } from "@/lib/app-url";
@@ -41,6 +42,10 @@ type FilterType = "menunggu_dp" | "menunggu_pelunasan" | "proses_edit" | "proses
 export default function AdminDashboardPage() {
   const [bookings, setBookings] = useState<DashboardBooking[]>([]);
   const [leads, setLeads] = useState<any[]>([]); // State untuk data leads
+  const [publicPackages, setPublicPackages] = useState<any[]>([]);
+  const [publicLeadName, setPublicLeadName] = useState("");
+  const [publicLeadPhone, setPublicLeadPhone] = useState("");
+  const [publicLeadPackageId, setPublicLeadPackageId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<FilterType>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -79,6 +84,29 @@ export default function AdminDashboardPage() {
     
     window.open(`https://wa.me/?text=${encodeURIComponent(textWa)}`, '_blank');
   };
+
+  const formatWhatsAppNumber = (raw: string) => {
+    const digits = String(raw || "").replace(/\D/g, "");
+    if (!digits) return "";
+    if (digits.startsWith("0")) return `62${digits.slice(1)}`;
+    if (digits.startsWith("62")) return digits;
+    return digits;
+  };
+
+  const handleSendPublicBookingLink = async () => {
+    const formattedPhone = formatWhatsAppNumber(publicLeadPhone);
+    if (!publicLeadName.trim()) return alert("Nama klien wajib diisi.");
+    if (!formattedPhone) return alert("No. WhatsApp klien tidak valid. Pastikan dimulai dengan 08.");
+    if (!publicLeadPackageId) return alert("Pilih paket terlebih dahulu.");
+
+    const selectedPackage = publicPackages.find((pkg) => String(pkg.id) === publicLeadPackageId);
+    const baseUrl = getAppBaseUrl();
+    const bookingUrl = `${baseUrl}/book?name=${encodeURIComponent(publicLeadName)}&phone=${encodeURIComponent(publicLeadPhone)}&packageId=${encodeURIComponent(publicLeadPackageId)}`;
+
+    const textWa = `Halo ${publicLeadName},\n\nSaya kirimkan link untuk mengisi form booking Maeng Studio. Silakan klik tautan berikut untuk langsung masuk ke formulir booking dan memilih paket Anda:\n${bookingUrl}\n\nPaket: ${selectedPackage?.name ?? "Paket pilihan"}\nHarga mulai: ${selectedPackage ? formatRupiah(Number(selectedPackage.price || 0)) : "-"}\n\nTerima kasih.`;
+
+    window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(textWa)}`, "_blank");
+  };
   // =====================================================================
 
   useEffect(() => {
@@ -86,13 +114,15 @@ export default function AdminDashboardPage() {
       setIsLoading(true);
       
       // Mengambil data bookings dan leads secara bersamaan (Paralel) agar loading lebih cepat
-      const [bookingsRes, leadsRes] = await Promise.all([
+      const [bookingsRes, leadsRes, packagesRes] = await Promise.all([
         getAdminBookingsAction(),
-        getLeadsAction()
+        getLeadsAction(),
+        getPublicPackages()
       ]);
 
       if (bookingsRes.success) setBookings((bookingsRes.data || []) as DashboardBooking[]);
       if (leadsRes.success) setLeads(leadsRes.data || []);
+      if (packagesRes.success) setPublicPackages(packagesRes.data || []);
       
       setIsLoading(false);
     }
@@ -244,6 +274,50 @@ export default function AdminDashboardPage() {
               event_details: b.event_details,
             }))}
           />
+
+          <div className="bg-white/[0.02] border border-white/10 rounded-3xl p-6 mb-8">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+              <div>
+                <p className="text-sm uppercase tracking-[0.3em] text-white/40 mb-2">Booking Publik</p>
+                <h3 className="text-xl font-semibold text-white">Kirim Link Booking ke Calon Klien</h3>
+              </div>
+              <div className="text-sm text-white/50">
+                Link ini membuka halaman booking publik tanpa harus masuk ke dashboard klien.
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+              <input
+                value={publicLeadName}
+                onChange={(e) => setPublicLeadName(e.target.value)}
+                placeholder="Nama Calon Klien"
+                className="w-full bg-black/50 border border-white/10 rounded-2xl px-4 py-4 text-white outline-none focus:border-amber-500"
+              />
+              <input
+                value={publicLeadPhone}
+                onChange={(e) => setPublicLeadPhone(e.target.value.replace(/\D/g, ""))}
+                placeholder="No. WhatsApp (08...)"
+                className="w-full bg-black/50 border border-white/10 rounded-2xl px-4 py-4 text-white outline-none focus:border-amber-500"
+              />
+              <select
+                value={publicLeadPackageId}
+                onChange={(e) => setPublicLeadPackageId(e.target.value)}
+                className="w-full bg-black/50 border border-white/10 rounded-2xl px-4 py-4 text-white outline-none focus:border-amber-500"
+              >
+                <option value="">Pilih Paket untuk Link</option>
+                {publicPackages.map((pkg) => (
+                  <option key={pkg.id} value={pkg.id}>{pkg.name} - {formatRupiah(Number(pkg.price || 0))}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={handleSendPublicBookingLink}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-2xl px-6 py-4 transition-all"
+              >
+                Kirim Link Booking via WA
+              </button>
+            </div>
+          </div>
 
           {/* KARTU PENDAPATAN */}
           <div className="mb-6">
