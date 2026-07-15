@@ -105,7 +105,10 @@ export default function BookingPageClient({ initialName, initialPhone, initialPa
 
       const result = await createPublicBookingAction(payload as any);
       if (result.success) {
-        setMessage({ type: "success", text: result.message || "Booking publik berhasil dibuat." });
+        setMessage({
+          type: "success",
+          text: result.message || "Booking berhasil terkirim. Silakan melakukan pembayaran dan konfirmasi ke WA admin 08117873878."
+        });
       } else {
         setMessage({ type: "error", text: result.message || "Gagal membuat booking publik." });
       }

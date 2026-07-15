@@ -152,14 +152,21 @@ export async function createPublicBookingAction(payload: any) {
     .from('invoices')
     .insert([{
       booking_id: booking.id,
+      user_id: publicBookingUserId,
       total_amount: totalPrice,
       dp_amount: dpAmount,
       paid_amount: 0,
       payment_status: 'unpaid'
     }]);
 
-  if (invoiceError) return { success: false, message: "Gagal membuat tagihan: " + invoiceError.message };
+  if (invoiceError) {
+    await supabaseAdmin.from('bookings').delete().eq('id', booking.id).then();
+    return { success: false, message: "Gagal membuat tagihan: " + invoiceError.message };
+  }
 
   revalidateBookingCalendarPaths();
-  return { success: true, message: "Pesanan publik berhasil dibuat!" };
+  return {
+    success: true,
+    message: "Booking berhasil terkirim. Silakan melakukan pembayaran dan konfirmasi ke WA admin 08117873878."
+  };
 }
