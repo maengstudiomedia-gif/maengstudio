@@ -22,9 +22,11 @@ export type BookingRow = {
   invoice_number?: string;
   client_name?: string;
   client_phone?: string;
+  package_id?: string;
   package_name?: string;
   package_price?: number;
   package_type?: string;
+  service_type?: string;
   event_type?: string;
   booker_type?: string;
   bride_name?: string;
@@ -33,6 +35,7 @@ export type BookingRow = {
   status?: string;
   invoice?: InvoiceRow | null;
   custom_event_type?: string;
+  package_snapshot?: Record<string, unknown> | null;
   /** Diisi dari notes.addon_package_ids + join ke katalog */
   addon_package_ids?: string[];
   addon_packages?: Array<{ id: string; name: string; type: string; price: number }>;

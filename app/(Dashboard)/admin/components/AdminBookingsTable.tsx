@@ -189,20 +189,33 @@ export default function AdminBookingsTable() {
           initialData={editing}
           onClose={() => setEditing(null)}
           onSave={async (data) => {
+             const normalizedEventDetails = (() => {
+               if (Array.isArray(data.event_details)) return data.event_details;
+               if (typeof data.event_details === "string") {
+                 try {
+                   return JSON.parse(data.event_details);
+                 } catch {
+                   return [];
+                 }
+               }
+               return [];
+             })();
+
              const payload = {
                 id: data.id,
+                invoice_number: data.invoice_number?.trim() || undefined,
                 client_name: data.client_name,
                 client_phone: data.client_phone,
+                package_id: data.package_id,
+                service_type: data.service_type,
                 event_type: data.event_type,
                 custom_event_type: data.custom_event_type,
                 booker_type: data.booker_type,
                 bride_name: data.bride_name,
                 groom_name: data.groom_name,
-                event_details: (Array.isArray(data.event_details) 
-                  ? data.event_details 
-                  : typeof data.event_details === "string" 
-                    ? JSON.parse(data.event_details) 
-                    : []) as any[]
+                event_details: normalizedEventDetails as any[],
+                status: data.status,
+                package_snapshot: data.package_snapshot,
               };
               const res = await updateAdminBookingAction(payload as any);
             if (res.success) {

@@ -33,14 +33,19 @@ export type BookingPayload = {
 
 export type UpdateBookingPayload = {
   id: string;
+  invoice_number?: string;
   client_name?: string;
   client_phone?: string;
+  package_id?: string;
+  service_type?: string;
   event_type?: string;
   custom_event_type?: string;
   booker_type?: string;
   bride_name?: string;
   groom_name?: string;
-  event_details?: EventDetail[];
+  event_details?: EventDetail[] | string | null;
+  status?: string;
+  package_snapshot?: Record<string, unknown> | null;
 };
 
 export type ProcessStage = "awaiting_settlement" | "edit_process" | "print_process" | "completed" | "picked_up";

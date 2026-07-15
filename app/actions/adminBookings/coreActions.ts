@@ -139,13 +139,23 @@ export async function updateAdminBookingAction(payload: UpdateBookingPayload) {
     const { id, ...updates } = payload;
     if (!id) return { success: false, error: "ID pesanan tidak ditemukan." };
 
-    if (updates.event_details !== undefined) {
-      const dateKeys = extractDateKeysFromEventDetails(updates.event_details);
-      const cap = await validateBookingEventDatesAction({ dateKeys, excludeBookingId: id });
-      if (!cap.success) return { success: false, error: cap.error || "Jadwal penuh." };
+    const normalizedUpdates: Record<string, unknown> = { ...updates };
+
+    if (normalizedUpdates.invoice_number === undefined || normalizedUpdates.invoice_number === "") {
+      normalizedUpdates.invoice_number = await generateInvoiceNumberAction();
+    } else {
+      normalizedUpdates.invoice_number = String(normalizedUpdates.invoice_number).trim();
     }
 
-    const { error } = await supabaseAdmin.from("bookings").update(updates).eq("id", id);
+    if (normalizedUpdates.event_details !== undefined) {
+      const dateKeys = extractDateKeysFromEventDetails(normalizedUpdates.event_details);
+      const cap = await validateBookingEventDatesAction({ dateKeys, excludeBookingId: id });
+      if (!cap.success) return { success: false, error: cap.error || "Jadwal penuh." };
+
+      normalizedUpdates.event_details = JSON.stringify(normalizedUpdates.event_details);
+    }
+
+    const { error } = await supabaseAdmin.from("bookings").update(normalizedUpdates).eq("id", id);
     if (error) throw new Error(error.message);
 
     revalidatePath("/admin/bookings");
