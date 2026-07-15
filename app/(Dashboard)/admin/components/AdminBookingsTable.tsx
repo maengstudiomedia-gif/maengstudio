@@ -42,6 +42,31 @@ export default function AdminBookingsTable() {
     setConfirmModal({ isOpen: true, message, onConfirm });
   };
 
+  const formatWhatsAppNumber = (raw: string | undefined) => {
+    const digits = String(raw || "").replace(/\D/g, "");
+    if (!digits) return "";
+    if (digits.startsWith("0")) return `62${digits.slice(1)}`;
+    if (digits.startsWith("62")) return digits;
+    return digits;
+  };
+
+  const notifyClientStage = (row: BookingRow, stage: "edit" | "print" | "completed") => {
+    const phone = formatWhatsAppNumber(row.client_phone);
+    if (!phone) return;
+
+    let message = `Halo ${row.client_name || "Kak"},\n`;
+    if (stage === "edit") {
+      message += `Pesanan Anda (${row.package_name || "produk"}) telah masuk tahap editing. Kami akan segera menyelesaikannya.`;
+    } else if (stage === "print") {
+      message += `Pesanan Anda (${row.package_name || "produk"}) telah selesai tahap editing dan sekarang masuk tahap percetakan.`;
+    } else {
+      message += `Pesanan Anda (${row.package_name || "produk"}) sudah selesai dicetak dan siap diambil di Maeng Studio. Silakan datang atau hubungi kami untuk konfirmasi pengambilan.`;
+    }
+
+    message += `\n\nNomor Nota: ${row.invoice_number || "-"}`;
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank");
+  };
+
   useEffect(() => { 
     fetchBookings(); 
   }, []);
@@ -132,21 +157,27 @@ export default function AdminBookingsTable() {
                 }
               );
             }}
-            onStartEdit={async (id) => {
-              const res = await updateBookingProcessAction(id, "start_edit");
-              if (res.success) fetchBookings();
-              else showAlert("Gagal update proses: " + res.error, "error");
+            onStartEdit={async (row) => {
+              const res = await updateBookingProcessAction(row.id, "start_edit");
+              if (res.success) {
+                fetchBookings();
+                notifyClientStage(row, "edit");
+              } else showAlert("Gagal update proses: " + res.error, "error");
             }}
-            onEnterPrintStage={async (id) => {
-              const res = await updateBookingProcessAction(id, "start_print");
-              if (res.success) fetchBookings();
-              else showAlert("Gagal memasuki tahap percetakan: " + res.error, "error");
+            onEnterPrintStage={async (row) => {
+              const res = await updateBookingProcessAction(row.id, "start_print");
+              if (res.success) {
+                fetchBookings();
+                notifyClientStage(row, "print");
+              } else showAlert("Gagal memasuki tahap percetakan: " + res.error, "error");
             }}
             onOpenThermalPrint={(row) => setThermalPrintRow({ ...row })}
-            onFinish={async (id) => {
-              const res = await updateBookingProcessAction(id, "finish");
-              if (res.success) fetchBookings();
-              else showAlert("Gagal update proses: " + res.error, "error");
+            onFinish={async (row) => {
+              const res = await updateBookingProcessAction(row.id, "finish");
+              if (res.success) {
+                fetchBookings();
+                notifyClientStage(row, "completed");
+              } else showAlert("Gagal update proses: " + res.error, "error");
             }}
             onMarkPickedUp={(row) => setPickupTarget(row)}
           />

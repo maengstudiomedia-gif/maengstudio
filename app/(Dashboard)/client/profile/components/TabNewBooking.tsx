@@ -208,8 +208,14 @@ export default function TabNewBooking({ userId, onBack }: TabNewBookingProps) {
                   </div>
                 )}
 
-                <div className="mb-6 bg-white/[0.02] w-14 h-14 rounded-xl flex items-center justify-center border border-white/[0.05]">
-                  <img src="/favicon.ico" alt="Maeng Studio" className="w-7 h-7 object-contain" />
+                <div className="mb-6 rounded-3xl overflow-hidden h-44 bg-white/[0.03] border border-white/[0.05]">
+                  {pkg.image_url || pkg.image ? (
+                    <img src={pkg.image_url || pkg.image} alt={pkg.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <img src="/favicon.ico" alt="Maeng Studio" className="w-7 h-7 object-contain" />
+                    </div>
+                  )}
                 </div>
                 
                 <h4 className="text-xl font-medium text-white mb-2">{pkg.name}</h4>

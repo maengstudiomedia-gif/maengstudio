@@ -43,6 +43,12 @@ export default function TabOverview({ onNewBookingClick }: Props) {
     return type || "Layanan Custom";
   };
 
+  const getUniqueTransferCode = (invoice: any) => {
+    const source = String(invoice?.invoice_number || invoice?.booking_id || "");
+    const digits = source.replace(/\D/g, "").slice(-3);
+    return digits.padStart(3, "0");
+  };
+
   // PERBAIKAN 2: Helper untuk memastikan event_details benar-benar Array
   const parseEventDetails = (details: any) => {
     if (!details) return [];
@@ -182,9 +188,31 @@ export default function TabOverview({ onNewBookingClick }: Props) {
                 </div>
 
                 {activeInvoice.payment_status !== 'paid' && (
-                  <button className="w-full mt-6 py-3 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.2)]">
-                    {activeInvoice.payment_status === 'unpaid' ? 'Bayar DP Sekarang' : 'Bayar Pelunasan'}
-                  </button>
+                  <div className="mt-6 space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="bg-white/5 border border-white/10 rounded-3xl p-4">
+                        <p className="text-sm font-semibold text-amber-300 mb-3">Transfer Bank / E-Wallet</p>
+                        <p className="text-[13px] text-white/70 leading-relaxed mb-3">Silakan transfer ke salah satu rekening berikut dan sertakan kode unik di akhir nominal transfer.</p>
+                        <div className="space-y-2 text-sm text-white/70">
+                          <p>BCA: <span className="text-white">8435901499</span></p>
+                          <p>Seabank: <span className="text-white">901760387739</span></p>
+                          <p>Dana: <span className="text-white">081226216862</span></p>
+                        </div>
+                        <p className="text-xs text-white/50 mt-4">Kode unik pelanggan:</p>
+                        <p className="text-amber-300 font-semibold text-sm">{getUniqueTransferCode(activeInvoice)}</p>
+                        <p className="text-[11px] text-white/40 mt-2">Contoh: transfer {formatRupiah(activeInvoice.dp_amount || ((activeInvoice.total_amount || 0) / 2))} + kode unik.</p>
+                      </div>
+                      <div className="bg-white/5 border border-white/10 rounded-3xl p-4">
+                        <p className="text-sm font-semibold text-emerald-300 mb-3">Bayar Tunai</p>
+                        <p className="text-[13px] text-white/70 leading-relaxed mb-4">Bayar langsung ke Maeng Studio saat datang. Kami siap menerima pembayaran tunai dan membantu penjemputan pesanan.</p>
+                        <a href="https://www.google.com/maps/search/?api=1&query=Maeng+Studio" target="_blank" rel="noreferrer" className="block text-amber-300 text-sm underline mb-2">Buka arah ke Maeng Studio</a>
+                        <a href="https://www.google.com/maps/dir/?api=1&destination=Maeng+Studio" target="_blank" rel="noreferrer" className="block text-emerald-300 text-sm underline">Simpan lokasi / Dapatkan rute</a>
+                      </div>
+                    </div>
+                    <button className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-black font-semibold rounded-xl transition-all shadow-[0_0_20px_rgba(245,158,11,0.2)]">
+                      {activeInvoice.payment_status === 'unpaid' ? 'Bayar DP Sekarang' : 'Bayar Pelunasan'}
+                    </button>
+                  </div>
                 )}
               </>
             ) : (

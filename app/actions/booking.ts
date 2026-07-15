@@ -29,16 +29,18 @@ export async function getClientDashboardData() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, message: "Unauthorized" };
 
-  // Ambil data pemesanan (Hanya milik user ini berkat RLS)
+  // Ambil data pemesanan milik user yang login
   const { data: bookings } = await supabase
     .from('bookings')
     .select('*')
+    .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
-  // Ambil data tagihan
+  // Ambil data tagihan milik user yang sama
   const { data: invoices } = await supabase
     .from('invoices')
     .select('*')
+    .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
   return { success: true, user, bookings: bookings || [], invoices: invoices || [] };

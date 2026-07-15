@@ -9,10 +9,10 @@ type BookingTableProps = {
   onPayDp: (row: BookingRow) => void;
   onEditDp: (row: BookingRow) => void; // Prop baru untuk Edit DP
   onPayLunas: (row: BookingRow) => void;
-  onStartEdit: (id: string) => void;
-  onEnterPrintStage: (id: string) => void;
+  onStartEdit: (row: BookingRow) => void;
+  onEnterPrintStage: (row: BookingRow) => void;
   onOpenThermalPrint: (row: BookingRow) => void;
-  onFinish: (id: string) => void;
+  onFinish: (row: BookingRow) => void;
   onMarkPickedUp: (row: BookingRow) => void;
 };
 
@@ -182,13 +182,13 @@ export default function BookingTable({
 
               <td className="px-4 py-3">
                 <div className="flex gap-1.5">
-                  <button onClick={() => onStartEdit(row.id)} disabled={!canStartEdit} title="Mulai proses edit" className={`p-2 rounded-lg ${canStartEdit ? "bg-white/5 hover:bg-white/10 text-white" : "text-white/10 cursor-not-allowed"}`}>
+                  <button onClick={() => onStartEdit(row)} disabled={!canStartEdit} title="Mulai proses edit" className={`p-2 rounded-lg ${canStartEdit ? "bg-white/5 hover:bg-white/10 text-white" : "text-white/10 cursor-not-allowed"}`}>
                     <Pencil className="w-4 h-4" />
                   </button>
-                  <button onClick={() => onEnterPrintStage(row.id)} disabled={!canEnterPrintStage} title="Masuk tahap percetakan" className={`p-2 rounded-lg ${canEnterPrintStage ? "bg-violet-500/10 hover:bg-violet-500/20 text-violet-300" : "text-violet-900/40 cursor-not-allowed"}`}>
+                  <button onClick={() => onEnterPrintStage(row)} disabled={!canEnterPrintStage} title="Masuk tahap percetakan" className={`p-2 rounded-lg ${canEnterPrintStage ? "bg-violet-500/10 hover:bg-violet-500/20 text-violet-300" : "text-violet-900/40 cursor-not-allowed"}`}>
                     <Factory className="w-4 h-4" />
                   </button>
-                  <button onClick={() => onFinish(row.id)} disabled={!canFinish} title="Selesaikan percetakan" className={`p-2 rounded-lg ${canFinish ? "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300" : "text-emerald-900/40 cursor-not-allowed"}`}>
+                  <button onClick={() => onFinish(row)} disabled={!canFinish} title="Selesaikan percetakan" className={`p-2 rounded-lg ${canFinish ? "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300" : "text-emerald-900/40 cursor-not-allowed"}`}>
                     <CheckCircle2 className="w-4 h-4" />
                   </button>
                   <button onClick={() => onMarkPickedUp(row)} disabled={!canMarkPicked} title="Tandai diambil" className={`p-2 rounded-lg ${canMarkPicked ? "bg-amber-500/10 hover:bg-amber-500/20 text-amber-300" : "text-amber-900/40 cursor-not-allowed"}`}>
