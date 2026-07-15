@@ -112,6 +112,14 @@ export async function createPublicBookingAction(payload: any) {
   );
 
   const { packageId, events, notes, totalPrice, dpAmount, name, phone } = payload;
+  const publicBookingUserId = process.env.SUPABASE_PUBLIC_BOOKING_USER_ID;
+
+  if (!publicBookingUserId) {
+    return {
+      success: false,
+      message: "Public booking tidak dapat diproses. Konfigurasi user publik belum tersedia."
+    };
+  }
 
   if (!name || !phone) return { success: false, message: "Nama dan nomor WhatsApp wajib diisi." };
   if (!events || events.length === 0) return { success: false, message: "Minimal harus ada satu rangkaian acara." };
@@ -125,6 +133,7 @@ export async function createPublicBookingAction(payload: any) {
   const { data: booking, error: bookingError } = await supabaseAdmin
     .from('bookings')
     .insert([{
+      user_id: publicBookingUserId,
       package_id: packageId,
       service_type: 'public_booking',
       client_name: name,

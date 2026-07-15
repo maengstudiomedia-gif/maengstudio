@@ -317,14 +317,27 @@ export default function BookingPageClient({ initialName, initialPhone, initialPa
             <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 space-y-4">
               <div>
                 <h2 className="text-xl font-semibold">Metode Pembayaran</h2>
-                <p className="text-sm text-white/50 mt-1">Gunakan metode transfer atau cash, lalu konfirmasi ke admin.</p>
+                <p className="text-sm text-white/50 mt-1">Transfer atau tunai di galeri. Semua atas nama Guntur Bayu Jantoro.</p>
               </div>
               <div className="rounded-3xl bg-white/5 border border-white/10 p-4 text-sm space-y-3">
-                <p className="text-white/80">Transfer Bank / E-wallet</p>
-                <p className="text-white/60 text-xs">BCA: 1234567890 a.n. Maeng Studio</p>
-                <p className="text-white/60 text-xs">ShopeePay: 081234567890 (Maeng Studio)</p>
-                <p className="text-white/60 text-xs">Gopay: 081234567890 (Maeng Studio)</p>
-                <p className="text-white/60 text-xs">Kode unik transfer: gunakan 3 digit terakhir nomor HP Anda.</p>
+                <p className="text-white/80 font-medium">Transfer Bank / E-wallet</p>
+                <p className="text-white/60 text-xs">BCA: 8435901499 a.n. Guntur Bayu Jantoro</p>
+                <p className="text-white/60 text-xs">SeaBank: 901760387739 a.n. Guntur Bayu Jantoro</p>
+                <p className="text-white/60 text-xs">DANA: 081226216862 a.n. Guntur Bayu Jantoro</p>
+                <p className="text-white/60 text-xs">Setelah transfer, konfirmasi WA agar admin segera memproses pesanan Anda.</p>
+              </div>
+              <div className="rounded-3xl bg-white/5 border border-white/10 p-4 text-sm space-y-3">
+                <p className="text-white/80 font-medium">Tunai</p>
+                <p className="text-white/60 text-xs">Bayar langsung di Galeri Maeng Studio.</p>
+                <p className="text-white/60 text-xs">Alamat: Jl. Kapten Robani Kadir LRG Maeng No 06 RT 016 RW 004 Kel. Talangputri, Kec. Plaju.</p>
+                <a
+                  href="https://maps.app.goo.gl/j1RSyaHJm1ucJDX19"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-amber-300 hover:text-amber-200 text-sm"
+                >
+                  Buka arah Google Maps
+                </a>
               </div>
             </div>
 
