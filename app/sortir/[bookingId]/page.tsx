@@ -67,6 +67,7 @@ export default function ClientGalleryPortal({
   const totalCommitted = movedCount + selectedIds.length;
   const remainingSlots = maxPhotos - movedCount;
   const remainingToSelect = Math.max(0, maxPhotos - totalCommitted);
+  const shouldWarnDenseAlbum = maxPhotos > DENSE_ALBUM_THRESHOLD && totalCommitted >= DENSE_ALBUM_THRESHOLD;
   const selectedPhotos = useMemo(
     () =>
       selectedIds
@@ -136,7 +137,11 @@ export default function ClientGalleryPortal({
         return;
       }
 
-      if (currentCommitted + 1 >= DENSE_ALBUM_THRESHOLD && maxPhotos >= DENSE_ALBUM_THRESHOLD) {
+      if (
+        maxPhotos > DENSE_ALBUM_THRESHOLD &&
+        currentCommitted >= DENSE_ALBUM_THRESHOLD &&
+        currentCommitted < maxPhotos
+      ) {
         setPendingSelectionId(id);
         return;
       }
@@ -569,7 +574,7 @@ export default function ClientGalleryPortal({
               </>
             )}
           </button>
-          {totalCommitted >= 100 && (
+          {shouldWarnDenseAlbum && (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/75">
               <p className="font-medium text-white/90">Perhatian: Album akan sangat padat.</p>
               <p className="mt-1 text-white/60">
@@ -764,7 +769,7 @@ export default function ClientGalleryPortal({
       )}
 
       <AlertModal
-        isOpen={!!pendingSelectionId}
+        isOpen={!!pendingSelectionId && maxPhotos > DENSE_ALBUM_THRESHOLD}
         title="Peringatan Album Padat"
         message="Anda sudah mencapai 100 foto. Desain album akan sangat padat dan ukuran tiap foto bisa menjadi kecil. Apakah Anda ingin melanjutkan menambahkan foto ini?"
         variant="error"
