@@ -63,7 +63,7 @@ export default function ClientGalleryPortal({
   const movedCount = movedFileIds.length;
   const totalCommitted = movedCount + selectedIds.length;
   const remainingSlots = maxPhotos - movedCount;
-  const remainingToSelect = maxPhotos - totalCommitted;
+  const remainingToSelect = Math.max(0, maxPhotos - totalCommitted);
 
   const refreshSession = useCallback(async () => {
     const session = await getSortirSessionAction(bookingId);
@@ -222,11 +222,6 @@ export default function ClientGalleryPortal({
       return;
     }
 
-    if (totalCommitted < maxPhotos) {
-      setShowIncompleteModal(true);
-      return;
-    }
-
     void runSubmit();
   };
 
@@ -332,8 +327,10 @@ export default function ClientGalleryPortal({
           </div>
           <p className="text-[10px] text-white/40">
             {movedCount > 0
-              ? `${movedCount} sudah dipindah · sisa ${remainingToSelect} pilih`
-              : `Sisa ${remainingToSelect} foto`}
+              ? `${movedCount} sudah dipindah${selectedIds.length > 0 ? ` · ${selectedIds.length} dipilih` : ""}`
+              : selectedIds.length > 0
+                ? `${selectedIds.length} dipilih`
+                : "Pilih foto yang Anda inginkan"}
           </p>
         </div>
       </div>
@@ -388,7 +385,7 @@ export default function ClientGalleryPortal({
           <div className="text-center py-16 text-white/40">
             <p>Semua foto tersisa sudah dipindahkan.</p>
             <p className="text-sm mt-2">
-              Pilih {remainingToSelect} foto lagi dari folder asli, atau kembalikan foto yang sudah dipindah.
+              Pilih foto lagi dari folder asli, atau kembalikan foto yang sudah dipindah.
             </p>
           </div>
         ) : (
@@ -510,11 +507,11 @@ export default function ClientGalleryPortal({
               </>
             )}
           </button>
-          {totalCommitted >= 60 && totalCommitted < maxPhotos && (
+          {totalCommitted >= 100 && (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/75">
-              <p className="font-medium text-white/90">Sudah memilih 60 foto.</p>
+              <p className="font-medium text-white/90">Perhatian: Album akan sangat padat.</p>
               <p className="mt-1 text-white/60">
-                Tambah foto di album Anda jika ingin lebih banyak pilihan sampai maksimal {maxPhotos} foto.
+                Anda sudah memilih {totalCommitted} foto. Desain album akan terlihat kecil dan penuh jika ditambah lebih banyak.
               </p>
               <a
                 href={folderLinkDariAdmin}
@@ -563,7 +560,7 @@ export default function ClientGalleryPortal({
             <div>
               <h2 className="text-lg font-medium text-white">Foto Sudah Dipindahkan</h2>
               <p className="text-xs text-white/50">
-                {movedCount} dari {maxPhotos} foto · {remainingToSelect} lagi dibutuhkan
+                {movedCount} foto sudah dipindah{maxPhotos ? ` · Maksimal ${maxPhotos} foto` : ""}
               </p>
             </div>
             <button
@@ -703,19 +700,6 @@ export default function ClientGalleryPortal({
           </div>
         </div>
       )}
-
-      <AlertModal
-        isOpen={showIncompleteModal}
-        title="Pilihan Foto Belum Lengkap"
-        message={
-          movedCount > 0
-            ? `Anda sudah memindahkan ${movedCount} foto dan memilih ${selectedIds.length} foto lagi (total ${totalCommitted} dari ${maxPhotos}). Masih perlu ${remainingToSelect} foto lagi sebelum bisa disimpan.`
-            : `Anda baru memilih ${selectedIds.length} dari ${maxPhotos} foto. Masih perlu memilih ${remainingToSelect} foto lagi sebelum bisa disimpan.`
-        }
-        variant="info"
-        confirmLabel="Mengerti"
-        onClose={() => setShowIncompleteModal(false)}
-      />
 
       <AlertModal
         isOpen={!!pendingSelectionId}
