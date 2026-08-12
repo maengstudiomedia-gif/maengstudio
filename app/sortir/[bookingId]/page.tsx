@@ -309,7 +309,7 @@ export default function ClientGalleryPortal({
           </p>
           <button
             type="button"
-            onClick={() => window.open(folderLinkDariAdmin, "_blank")}
+            onClick={() => setIsSuccess(false)}
             className="mt-4 w-full rounded-2xl bg-emerald-500/10 border border-emerald-500/30 px-5 py-3 text-sm font-medium text-emerald-100 hover:bg-emerald-500/15 transition-colors"
           >
             Tambah Foto di Album Anda
@@ -395,6 +395,7 @@ export default function ClientGalleryPortal({
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
             {photos.map((photo) => {
               const isSelected = selectedIds.includes(photo.id);
+              const isMoved = movedFileIds.includes(photo.id);
               const isDownloading = downloadingId === photo.id;
               const aspectClass =
                 photo.orientation === "landscape"
@@ -407,23 +408,33 @@ export default function ClientGalleryPortal({
                 <div
                   key={photo.id}
                   className={`relative ${aspectClass} group overflow-hidden rounded-xl border-2 transition-all duration-200 ${
-                    isSelected
-                      ? "border-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.35)] ring-1 ring-amber-500/30"
+                    isMoved || isSelected
+                      ? "border-white/20 bg-black/20"
                       : "border-white/5 hover:border-white/20"
                   }`}
                 >
                   <img
                     src={photo.thumbnail}
                     alt={photo.name}
-                    className={`w-full h-full object-cover transition-transform duration-500 ${
-                      isSelected ? "scale-105" : "group-hover:scale-105"
+                    className={`w-full h-full object-cover transition-all duration-500 ${
+                      isMoved || isSelected ? "opacity-60" : "group-hover:scale-105"
                     }`}
                     loading="lazy"
                   />
 
+                  {(isMoved || isSelected) && (
+                    <div className="absolute inset-0 bg-black/40 z-10 pointer-events-none" />
+                  )}
+
                   {isSelected && (
-                    <div className="absolute top-2 right-2 bg-amber-500 text-black p-1.5 rounded-full z-10 shadow-lg">
+                    <div className="absolute top-2 right-2 bg-amber-500 text-black p-1.5 rounded-full z-20 shadow-lg">
                       <Check className="w-3.5 h-3.5 stroke-[3]" />
+                    </div>
+                  )}
+
+                  {isMoved && !isSelected && (
+                    <div className="absolute top-2 right-2 bg-white/10 text-white text-[10px] px-2 py-1 rounded-full z-20">
+                      Sudah dipindah
                     </div>
                   )}
 
@@ -456,14 +467,17 @@ export default function ClientGalleryPortal({
                       <button
                         type="button"
                         onClick={() => togglePhotoSelection(photo.id)}
+                        disabled={isMoved}
                         className={`flex flex-col items-center justify-center gap-0.5 backdrop-blur-md text-[9px] font-medium py-2 rounded-lg transition-colors ${
-                          isSelected
-                            ? "bg-amber-500 text-black hover:bg-amber-400"
-                            : "bg-amber-500/20 text-amber-300 hover:bg-amber-500 hover:text-black border border-amber-500/40"
+                          isMoved
+                            ? "bg-white/10 text-white/40 cursor-not-allowed"
+                            : isSelected
+                              ? "bg-amber-500 text-black hover:bg-amber-400"
+                              : "bg-amber-500/20 text-amber-300 hover:bg-amber-500 hover:text-black border border-amber-500/40"
                         }`}
                       >
                         <Check className="w-3.5 h-3.5" />
-                        {isSelected ? "Batal" : "Pilih"}
+                        {isMoved ? "Sudah dipindah" : isSelected ? "Batal" : "Pilih"}
                       </button>
                     </div>
                   </div>
