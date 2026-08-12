@@ -74,7 +74,7 @@ export default function AdminDashboardPage() {
         const parsed = Number(value);
         next.maxPhotos = Number.isNaN(parsed)
           ? current.maxPhotos
-          : Math.min(150, Math.max(60, parsed));
+          : Math.min(135, Math.max(60, parsed));
       } else {
         (next as any)[field] = value;
       }

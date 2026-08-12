@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useState, useEffect, useCallback } from "react";
+import { use, useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   Loader2,
@@ -29,6 +29,9 @@ type Photo = {
   orientation: PhotoOrientation;
 };
 
+const DENSE_ALBUM_THRESHOLD = 100;
+const HARD_ALBUM_LIMIT = 135;
+
 export default function ClientGalleryPortal({
   params,
 }: {
@@ -39,7 +42,7 @@ export default function ClientGalleryPortal({
 
   const folderLinkDariAdmin = searchParams.get("drive") || "";
   const clientName = searchParams.get("name") || "Klien";
-  const maxPhotos = Math.min(150, Math.max(1, parseInt(searchParams.get("max") || "60", 10)));
+  const maxPhotos = Math.min(HARD_ALBUM_LIMIT, Math.max(1, parseInt(searchParams.get("max") || "60", 10)));
 
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -64,6 +67,13 @@ export default function ClientGalleryPortal({
   const totalCommitted = movedCount + selectedIds.length;
   const remainingSlots = maxPhotos - movedCount;
   const remainingToSelect = Math.max(0, maxPhotos - totalCommitted);
+  const selectedPhotos = useMemo(
+    () =>
+      selectedIds
+        .map((id) => photos.find((photo) => photo.id === id))
+        .filter((photo): photo is Photo => Boolean(photo)),
+    [photos, selectedIds]
+  );
 
   const refreshSession = useCallback(async () => {
     const session = await getSortirSessionAction(bookingId);
@@ -109,18 +119,27 @@ export default function ClientGalleryPortal({
     const isSelecting = !selectedIds.includes(id);
     const currentCommitted = movedCount + selectedIds.length;
 
-    if (isSelecting && selectedIds.length >= remainingSlots) {
-      setErrorMessage(
-        movedCount > 0
-          ? `Anda sudah memindahkan ${movedCount} foto. Maksimal bisa memilih ${remainingSlots} foto lagi.`
-          : `Maksimal hanya bisa memilih ${maxPhotos} foto!`
-      );
-      return;
-    }
+    if (isSelecting) {
+      if (currentCommitted >= maxPhotos) {
+        setErrorMessage(
+          `Batas maksimal album adalah ${maxPhotos} foto. Anda tidak dapat menambahkan foto lagi.`
+        );
+        return;
+      }
 
-    if (isSelecting && currentCommitted + 1 >= 100 && maxPhotos >= 100) {
-      setPendingSelectionId(id);
-      return;
+      if (selectedIds.length >= remainingSlots) {
+        setErrorMessage(
+          movedCount > 0
+            ? `Anda sudah memindahkan ${movedCount} foto. Maksimal bisa memilih ${remainingSlots} foto lagi.`
+            : `Maksimal hanya bisa memilih ${maxPhotos} foto!`
+        );
+        return;
+      }
+
+      if (currentCommitted + 1 >= DENSE_ALBUM_THRESHOLD && maxPhotos >= DENSE_ALBUM_THRESHOLD) {
+        setPendingSelectionId(id);
+        return;
+      }
     }
 
     setSelectedIds((prev) => {
@@ -368,6 +387,49 @@ export default function ClientGalleryPortal({
               )}
             </div>
           </button>
+        </div>
+      )}
+
+      {selectedPhotos.length > 0 && (
+        <div className="px-4 md:px-8 pt-4">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-medium text-white">Foto terpilih</p>
+                <p className="text-[11px] text-white/50">Preview cepat dan batalkan pilihan sebelum disimpan.</p>
+              </div>
+              <span className="rounded-full border border-amber-500/40 bg-amber-500/10 px-2.5 py-1 text-[10px] font-medium text-amber-300">
+                {selectedPhotos.length} dipilih
+              </span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-6 xl:grid-cols-8">
+              {selectedPhotos.map((photo) => (
+                <div key={photo.id} className="group relative aspect-[3/4] overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+                  <img src={photo.thumbnail} alt={photo.name} className="h-full w-full object-cover" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/15 to-transparent" />
+                  <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-2 p-2 opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => setZoomedPhoto(photo)}
+                      className="rounded-lg bg-white/10 p-1.5 text-white/90 backdrop-blur-sm transition-colors hover:bg-white/20"
+                      aria-label={`Preview ${photo.name}`}
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => togglePhotoSelection(photo.id)}
+                      className="rounded-lg bg-rose-500/80 p-1.5 text-white transition-colors hover:bg-rose-500"
+                      aria-label={`Batal pilih ${photo.name}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -704,7 +766,7 @@ export default function ClientGalleryPortal({
       <AlertModal
         isOpen={!!pendingSelectionId}
         title="Peringatan Album Padat"
-        message={`Anda hampir mencapai 100 foto. Desain album akan sangat padat dan ukuran tiap foto bisa menjadi kecil. Apakah Anda yakin ingin menambahkan foto ini?`}
+        message="Anda sudah mencapai 100 foto. Desain album akan sangat padat dan ukuran tiap foto bisa menjadi kecil. Apakah Anda ingin melanjutkan menambahkan foto ini?"
         variant="error"
         confirmLabel="Ya, lanjutkan"
         cancelLabel="Tidak"
