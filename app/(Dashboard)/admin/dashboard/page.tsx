@@ -53,7 +53,7 @@ export default function AdminDashboardPage() {
   // =====================================================================
   // --- TAMBAHAN: STATE & FUNGSI BARU UNTUK FITUR SORTIR FOTO KLIEN ---
   // =====================================================================
-  const [adminInputs, setAdminInputs] = useState<Record<string, { link: string; albumType: string; maxPhotos: number }>>({});
+  const [adminInputs, setAdminInputs] = useState<Record<string, { link: string; albumType: string; maxPhotos: number; sendCount: number }>>({});
   const [driveStatus, setDriveStatus] = useState<string>("Memeriksa Google Drive...");
 
   useEffect(() => {
@@ -62,12 +62,24 @@ export default function AdminDashboardPage() {
 
   const handleInputChange = (bookingId: string, field: string, value: string) => {
     setAdminInputs((prev) => {
-      const current = prev[bookingId] || { link: "", albumType: "10_sheet", maxPhotos: 60 };
-      let maxPhotos = current.maxPhotos;
+      const current = prev[bookingId] || { link: "", albumType: "10_sheet", maxPhotos: 60, sendCount: 0 };
+      const next = { ...current };
+
       if (field === "albumType") {
-        maxPhotos = value === "10_sheet" ? 60 : 70;
+        next.albumType = value;
+        if (current.maxPhotos <= 60) {
+          next.maxPhotos = value === "10_sheet" ? 60 : 70;
+        }
+      } else if (field === "maxPhotos") {
+        const parsed = Number(value);
+        next.maxPhotos = Number.isNaN(parsed)
+          ? current.maxPhotos
+          : Math.min(150, Math.max(60, parsed));
+      } else {
+        (next as any)[field] = value;
       }
-      return { ...prev, [bookingId]: { ...current, [field]: value, maxPhotos } };
+
+      return { ...prev, [bookingId]: next };
     });
   };
 
@@ -76,13 +88,24 @@ export default function AdminDashboardPage() {
     if (!inputData || !inputData.link) {
       return alert("Harap masukkan link Google Drive terlebih dahulu!");
     }
-    
+
+    if (inputData.sendCount >= 2) {
+      return alert("Link hanya bisa dikirim sebanyak 2 kali. Jika perlu, buat pengaturan ulang link baru.");
+    }
+
     const baseUrl = getAppBaseUrl();
     const clientPortalUrl = `${baseUrl}/sortir/${bookingId}?drive=${encodeURIComponent(inputData.link)}&max=${inputData.maxPhotos}&name=${encodeURIComponent(clientName)}`;
-    
+
     const textWa = `Halo kak ${clientName},\n\nBerikut link folder untuk melihat galeri foto mentah: ${inputData.link}\n\nKakak mendapat paket Cetak ${inputData.albumType === "10_sheet" ? "10 Sheet" : "15 Sheet"} (Maksimal ${inputData.maxPhotos} foto).\n\nSilakan pilih foto langsung melalui galeri interaktif kami di link berikut:\n${clientPortalUrl}\n\nTerima kasih!`;
-    
+
     window.open(`https://wa.me/?text=${encodeURIComponent(textWa)}`, '_blank');
+    setAdminInputs((prev) => ({
+      ...prev,
+      [bookingId]: {
+        ...inputData,
+        sendCount: inputData.sendCount + 1,
+      },
+    }));
   };
 
   const formatWhatsAppNumber = (raw: string) => {
@@ -470,7 +493,7 @@ export default function AdminDashboardPage() {
                           const sisa = Math.max(total - paid, 0);
                           
                           // --- TAMBAHAN: MENGAMBIL DATA INPUT ADMIN SAAT INI UNTUK BARIS INI ---
-                          const inputData = adminInputs[b.id] || { link: "", albumType: "10_sheet", maxPhotos: 60 };
+                          const inputData = adminInputs[b.id] || { link: "", albumType: "10_sheet", maxPhotos: 60, sendCount: 0 };
 
                           return (
                             <tr key={b.id} className="border-b border-white/5 hover:bg-white/[0.02] group">
@@ -491,14 +514,26 @@ export default function AdminDashboardPage() {
                               {/* --- TAMBAHAN: FORM INPUT DAN TOMBOL KIRIM UNTUK ADMIN --- */}
                               <td className="px-4 py-3 border-l border-white/5">
                                 <div className="flex flex-col gap-2 max-w-[250px] mx-auto">
-                                  <select 
-                                    value={inputData.albumType}
-                                    onChange={(e) => handleInputChange(b.id, "albumType", e.target.value)}
-                                    className="bg-black/50 border border-white/10 rounded-lg py-1.5 px-3 text-[11px] text-white focus:border-amber-500 outline-none"
-                                  >
-                                    <option value="10_sheet">Kolase 10 Sheet (Max 60 Foto)</option>
-                                    <option value="15_sheet">Kolase 15 Sheet (Max 70 Foto)</option>
-                                  </select>
+                                          <div className="grid grid-cols-2 gap-2">
+                                    <select 
+                                      value={inputData.albumType}
+                                      onChange={(e) => handleInputChange(b.id, "albumType", e.target.value)}
+                                      className="bg-black/50 border border-white/10 rounded-lg py-1.5 px-3 text-[11px] text-white focus:border-amber-500 outline-none"
+                                    >
+                                      <option value="10_sheet">Kolase 10 Sheet</option>
+                                      <option value="15_sheet">Kolase 15 Sheet</option>
+                                    </select>
+                                    <input
+                                      type="number"
+                                      min={60}
+                                      max={150}
+                                      value={inputData.maxPhotos}
+                                      onChange={(e) => handleInputChange(b.id, "maxPhotos", e.target.value)}
+                                      className="bg-black/50 border border-white/10 rounded-lg py-1.5 px-3 text-[11px] text-white focus:border-amber-500 outline-none"
+                                      title="Jumlah maksimal foto yang dapat dipilih oleh konsumen"
+                                      placeholder="Jumlah foto"
+                                    />
+                                  </div>
                                   <div className="flex gap-2">
                                     <input
                                       type="url"
@@ -515,6 +550,14 @@ export default function AdminDashboardPage() {
                                       <Send className="w-3.5 h-3.5" />
                                     </button>
                                   </div>
+                                  <p className="text-[10px] text-white/40">
+                                    Konsumen bisa memilih hingga {inputData.maxPhotos} foto. Link dapat dikirim ulang sampai 2 kali.
+                                  </p>
+                                  {inputData.sendCount > 0 && (
+                                    <p className="text-[10px] text-amber-300">
+                                      Link sudah dikirim {inputData.sendCount} kali.
+                                    </p>
+                                  )}
                                 </div>
                               </td>
                               {/* --- AKHIR DARI TAMBAHAN FITUR SORTIR --- */}

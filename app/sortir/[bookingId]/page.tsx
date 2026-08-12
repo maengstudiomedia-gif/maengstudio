@@ -39,7 +39,7 @@ export default function ClientGalleryPortal({
 
   const folderLinkDariAdmin = searchParams.get("drive") || "";
   const clientName = searchParams.get("name") || "Klien";
-  const maxPhotos = parseInt(searchParams.get("max") || "60", 10);
+  const maxPhotos = Math.min(150, Math.max(1, parseInt(searchParams.get("max") || "60", 10)));
 
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -56,6 +56,7 @@ export default function ClientGalleryPortal({
   const [showMovedPanel, setShowMovedPanel] = useState(false);
   const [revertingId, setRevertingId] = useState<string | null>(null);
   const [confirmRevertId, setConfirmRevertId] = useState<string | null>(null);
+  const [pendingSelectionId, setPendingSelectionId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
@@ -104,19 +105,30 @@ export default function ClientGalleryPortal({
 
   const togglePhotoSelection = (id: string) => {
     if (movedFileIds.includes(id)) return;
+
+    const isSelecting = !selectedIds.includes(id);
+    const currentCommitted = movedCount + selectedIds.length;
+
+    if (isSelecting && selectedIds.length >= remainingSlots) {
+      setErrorMessage(
+        movedCount > 0
+          ? `Anda sudah memindahkan ${movedCount} foto. Maksimal bisa memilih ${remainingSlots} foto lagi.`
+          : `Maksimal hanya bisa memilih ${maxPhotos} foto!`
+      );
+      return;
+    }
+
+    if (isSelecting && currentCommitted + 1 >= 100 && maxPhotos >= 100) {
+      setPendingSelectionId(id);
+      return;
+    }
+
     setSelectedIds((prev) => {
       if (prev.includes(id)) return prev.filter((p) => p !== id);
-      if (prev.length >= remainingSlots) {
-        setErrorMessage(
-          movedCount > 0
-            ? `Anda sudah memindahkan ${movedCount} foto. Maksimal bisa memilih ${remainingSlots} foto lagi.`
-            : `Maksimal hanya bisa memilih ${maxPhotos} foto!`
-        );
-        return prev;
-      }
       return [...prev, id];
     });
   };
+
 
   const handleDownload = async (photo: Photo) => {
     setDownloadingId(photo.id);
@@ -216,6 +228,16 @@ export default function ClientGalleryPortal({
     }
 
     void runSubmit();
+  };
+
+  const confirmDenseSelection = () => {
+    if (!pendingSelectionId) return;
+    setSelectedIds((prev) => [...prev, pendingSelectionId]);
+    setPendingSelectionId(null);
+  };
+
+  const cancelDenseSelection = () => {
+    setPendingSelectionId(null);
   };
 
   const handleRevert = async (fileId: string) => {
@@ -446,7 +468,7 @@ export default function ClientGalleryPortal({
       </div>
 
       <div className="fixed bottom-0 inset-x-0 bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/90 to-transparent p-6 z-40 pointer-events-none">
-        <div className="max-w-md mx-auto pointer-events-auto">
+        <div className="max-w-md mx-auto pointer-events-auto space-y-3">
           <button
             onClick={handleSubmit}
             disabled={isSubmitting || selectedIds.length === 0}
@@ -467,6 +489,22 @@ export default function ClientGalleryPortal({
               </>
             )}
           </button>
+          {totalCommitted >= 60 && totalCommitted < maxPhotos && (
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/75">
+              <p className="font-medium text-white/90">Sudah memilih 60 foto.</p>
+              <p className="mt-1 text-white/60">
+                Tambah foto di album Anda jika ingin lebih banyak pilihan sampai maksimal {maxPhotos} foto.
+              </p>
+              <a
+                href={folderLinkDariAdmin}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex w-full items-center justify-center rounded-xl bg-emerald-500/10 border border-emerald-500/25 px-4 py-3 text-sm text-emerald-300 hover:bg-emerald-500/15 transition-colors"
+              >
+                Tambah Foto di Album Anda
+              </a>
+            </div>
+          )}
         </div>
       </div>
 
@@ -658,6 +696,16 @@ export default function ClientGalleryPortal({
         onClose={() => setShowIncompleteModal(false)}
       />
 
+      <AlertModal
+        isOpen={!!pendingSelectionId}
+        title="Peringatan Album Padat"
+        message={`Anda hampir mencapai 100 foto. Desain album akan sangat padat dan ukuran tiap foto bisa menjadi kecil. Apakah Anda yakin ingin menambahkan foto ini?`}
+        variant="error"
+        confirmLabel="Ya, lanjutkan"
+        cancelLabel="Tidak"
+        onClose={confirmDenseSelection}
+        onCancel={cancelDenseSelection}
+      />
 
       {confirmRevertId && (
         <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">

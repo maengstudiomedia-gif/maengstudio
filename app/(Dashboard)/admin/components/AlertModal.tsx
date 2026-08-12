@@ -10,7 +10,9 @@ type AlertModalProps = {
   message: string;
   variant?: AlertVariant;
   confirmLabel?: string;
+  cancelLabel?: string;
   onClose: () => void;
+  onCancel?: () => void;
 };
 
 const variantStyles: Record<AlertVariant, { icon: React.ReactNode; ring: string; iconBg: string }> = {
@@ -37,7 +39,9 @@ export default function AlertModal({
   message,
   variant = "info",
   confirmLabel = "Tutup",
+  cancelLabel,
   onClose,
+  onCancel,
 }: AlertModalProps) {
   if (!isOpen) return null;
 
@@ -53,7 +57,15 @@ export default function AlertModal({
           <p className="text-sm text-white/65 leading-relaxed">{message}</p>
         </div>
 
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-3">
+          {onCancel && cancelLabel && (
+            <button
+              onClick={onCancel}
+              className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold transition-colors"
+            >
+              {cancelLabel}
+            </button>
+          )}
           <button
             onClick={onClose}
             className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold transition-colors"
