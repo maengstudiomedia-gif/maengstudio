@@ -55,6 +55,7 @@ export default function AdminDashboardPage() {
   // =====================================================================
   const [adminInputs, setAdminInputs] = useState<Record<string, { link: string; albumType: string; maxPhotos: number; sendCount: number }>>({});
   const [driveStatus, setDriveStatus] = useState<string>("Memeriksa Google Drive...");
+  const DEFAULT_MAX_PHOTOS = 135;
 
   useEffect(() => {
     checkGoogleDriveConfigAction().then((result) => setDriveStatus(result.message));
@@ -62,19 +63,17 @@ export default function AdminDashboardPage() {
 
   const handleInputChange = (bookingId: string, field: string, value: string) => {
     setAdminInputs((prev) => {
-      const current = prev[bookingId] || { link: "", albumType: "10_sheet", maxPhotos: 60, sendCount: 0 };
+      const current = prev[bookingId] || { link: "", albumType: "10_sheet", maxPhotos: DEFAULT_MAX_PHOTOS, sendCount: 0 };
       const next = { ...current };
 
       if (field === "albumType") {
         next.albumType = value;
-        if (current.maxPhotos <= 60) {
-          next.maxPhotos = value === "10_sheet" ? 60 : 70;
-        }
+        next.maxPhotos = DEFAULT_MAX_PHOTOS;
       } else if (field === "maxPhotos") {
         const parsed = Number(value);
         next.maxPhotos = Number.isNaN(parsed)
           ? current.maxPhotos
-          : Math.min(135, Math.max(60, parsed));
+          : Math.min(DEFAULT_MAX_PHOTOS, Math.max(1, parsed));
       } else {
         (next as any)[field] = value;
       }
@@ -89,21 +88,24 @@ export default function AdminDashboardPage() {
       return alert("Harap masukkan link Google Drive terlebih dahulu!");
     }
 
-    if (inputData.sendCount >= 2) {
+    const normalizedMaxPhotos = Math.min(DEFAULT_MAX_PHOTOS, Math.max(1, Number(inputData.maxPhotos) || DEFAULT_MAX_PHOTOS));
+    const finalizedInput = { ...inputData, maxPhotos: normalizedMaxPhotos };
+
+    if (finalizedInput.sendCount >= 2) {
       return alert("Link hanya bisa dikirim sebanyak 2 kali. Jika perlu, buat pengaturan ulang link baru.");
     }
 
     const baseUrl = getAppBaseUrl();
-    const clientPortalUrl = `${baseUrl}/sortir/${bookingId}?drive=${encodeURIComponent(inputData.link)}&max=${inputData.maxPhotos}&name=${encodeURIComponent(clientName)}`;
+    const clientPortalUrl = `${baseUrl}/sortir/${bookingId}?drive=${encodeURIComponent(finalizedInput.link)}&max=${finalizedInput.maxPhotos}&name=${encodeURIComponent(clientName)}`;
 
-    const textWa = `Halo kak ${clientName},\n\nBerikut link folder untuk melihat galeri foto mentah: ${inputData.link}\n\nKakak mendapat paket Cetak ${inputData.albumType === "10_sheet" ? "10 Sheet" : "15 Sheet"} (Maksimal ${inputData.maxPhotos} foto).\n\nSilakan pilih foto langsung melalui galeri interaktif kami di link berikut:\n${clientPortalUrl}\n\nTerima kasih!`;
+    const textWa = `Halo kak ${clientName},\n\nBerikut link folder untuk melihat galeri foto mentah: ${finalizedInput.link}\n\nKakak mendapat paket Cetak ${finalizedInput.albumType === "10_sheet" ? "10 Sheet" : "15 Sheet"} (Maksimal ${finalizedInput.maxPhotos} foto).\n\nSilakan pilih foto langsung melalui galeri interaktif kami di link berikut:\n${clientPortalUrl}\n\nTerima kasih!`;
 
     window.open(`https://wa.me/?text=${encodeURIComponent(textWa)}`, '_blank');
     setAdminInputs((prev) => ({
       ...prev,
       [bookingId]: {
-        ...inputData,
-        sendCount: inputData.sendCount + 1,
+        ...finalizedInput,
+        sendCount: finalizedInput.sendCount + 1,
       },
     }));
   };
@@ -493,7 +495,7 @@ export default function AdminDashboardPage() {
                           const sisa = Math.max(total - paid, 0);
                           
                           // --- TAMBAHAN: MENGAMBIL DATA INPUT ADMIN SAAT INI UNTUK BARIS INI ---
-                          const inputData = adminInputs[b.id] || { link: "", albumType: "10_sheet", maxPhotos: 60, sendCount: 0 };
+                          const inputData = adminInputs[b.id] || { link: "", albumType: "10_sheet", maxPhotos: DEFAULT_MAX_PHOTOS, sendCount: 0 };
 
                           return (
                             <tr key={b.id} className="border-b border-white/5 hover:bg-white/[0.02] group">
@@ -525,8 +527,8 @@ export default function AdminDashboardPage() {
                                     </select>
                                     <input
                                       type="number"
-                                      min={60}
-                                      max={150}
+                                      min={1}
+                                      max={DEFAULT_MAX_PHOTOS}
                                       value={inputData.maxPhotos}
                                       onChange={(e) => handleInputChange(b.id, "maxPhotos", e.target.value)}
                                       className="bg-black/50 border border-white/10 rounded-lg py-1.5 px-3 text-[11px] text-white focus:border-amber-500 outline-none"

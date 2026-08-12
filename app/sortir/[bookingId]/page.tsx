@@ -31,6 +31,7 @@ type Photo = {
 
 const DENSE_ALBUM_THRESHOLD = 100;
 const HARD_ALBUM_LIMIT = 135;
+const LEGACY_LOW_CAP = 60;
 
 export default function ClientGalleryPortal({
   params,
@@ -40,9 +41,15 @@ export default function ClientGalleryPortal({
   const { bookingId } = use(params);
   const searchParams = useSearchParams();
 
+  const rawMaxPhotos = Number.parseInt(searchParams.get("max") || String(HARD_ALBUM_LIMIT), 10);
+  const normalizedMaxPhotos = Number.isFinite(rawMaxPhotos) ? rawMaxPhotos : HARD_ALBUM_LIMIT;
+  const maxPhotos = Math.min(
+    HARD_ALBUM_LIMIT,
+    Math.max(1, normalizedMaxPhotos <= LEGACY_LOW_CAP ? HARD_ALBUM_LIMIT : normalizedMaxPhotos)
+  );
+
   const folderLinkDariAdmin = searchParams.get("drive") || "";
   const clientName = searchParams.get("name") || "Klien";
-  const maxPhotos = Math.min(HARD_ALBUM_LIMIT, Math.max(1, parseInt(searchParams.get("max") || "60", 10)));
 
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
