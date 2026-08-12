@@ -307,6 +307,13 @@ export default function ClientGalleryPortal({
             {movedCount || maxPhotos} foto telah berhasil dipindahkan ke folder
             <span className="text-emerald-400/90"> Foto Cetak_{clientName}</span> di Maeng Studio.
           </p>
+          <button
+            type="button"
+            onClick={() => window.open(folderLinkDariAdmin, "_blank")}
+            className="mt-4 w-full rounded-2xl bg-emerald-500/10 border border-emerald-500/30 px-5 py-3 text-sm font-medium text-emerald-100 hover:bg-emerald-500/15 transition-colors"
+          >
+            Tambah Foto di Album Anda
+          </button>
         </div>
       </div>
     );
