@@ -405,7 +405,10 @@ export async function checkGoogleDriveConfigAction(): Promise<{
 // ---------------------------------------------------------------------------
 // 1. FUNGSI MENGAMBIL FOTO DARI DRIVE (Digunakan di Halaman Galeri Klien)
 // ---------------------------------------------------------------------------
-export async function getPhotosFromDriveAction(bookingId: string, portalToken: string) {
+export async function getPhotosFromDriveAction(
+  bookingId: string,
+  portalToken: string
+): Promise<DrivePhoto[]> {
   try {
     const sortirNotes = await requirePortalNotes(bookingId, portalToken);
     const folderId = sortirNotes.sourceFolderId;
@@ -424,9 +427,9 @@ export async function getPhotosFromDriveAction(bookingId: string, portalToken: s
     return files
       .filter((file: { id?: string | null; name?: string | null }) => file.id && file.name)
       .map((file: { id?: string | null; name?: string | null; imageMediaMetadata?: { width?: number | null; height?: number | null } | null }) => {
-        return mapDriveFileToPhoto(file, bookingId, portalToken) ?? undefined;
-      });
-    return files.filter((photo): photo is DrivePhoto => Boolean(photo));
+        return mapDriveFileToPhoto(file, bookingId, portalToken);
+      })
+      .filter((photo: DrivePhoto | null): photo is DrivePhoto => photo !== null);
   } catch (error) {
     console.error("Gagal mengambil foto dari Drive:", error);
     throw new Error("Gagal memuat galeri dari Google Drive.");
