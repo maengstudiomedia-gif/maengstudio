@@ -506,7 +506,7 @@ export async function getSortirSessionAction(
     const photoById = new Map(drivePhotos.map((photo) => [photo.id, photo]));
     const stillMissing = mergedIds.filter((id) => !photoById.has(id));
     if (stillMissing.length > 0) {
-      const fallbackPhotos = await resolvePhotosFromFileIds(stillMissing);
+      const fallbackPhotos = await resolvePhotosFromFileIds(stillMissing, bookingId, portalToken);
       for (const photo of fallbackPhotos) {
         photoById.set(photo.id, photo);
       }
