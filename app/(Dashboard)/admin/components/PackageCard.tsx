@@ -2,6 +2,7 @@
 
 // 1. Pastikan import Plus ada di sini
 import { CheckCircle2, Trash2, Edit, Package, Plus } from "lucide-react";
+import { getPackageCategoryLabel } from "@/lib/package-categories";
 
 interface PackageProps {
   pkg: any;
@@ -17,13 +18,14 @@ export default function PackageCard({ pkg, onEdit, onDelete, onBooking }: Packag
   const featuresList = typeof pkg.features === 'string' ? JSON.parse(pkg.features) : (pkg.features || []);
   const printsList = typeof pkg.print_results === 'string' ? JSON.parse(pkg.print_results) : (pkg.print_results || []);
   
-  const isAudio = pkg.type === "audio";
+  const isAudio = String(pkg.type).toLowerCase() === "audio";
+  const categoryLabel = getPackageCategoryLabel(pkg.type);
 
   return (
     <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-5 group hover:border-amber-500/30 transition-all flex flex-col h-full relative overflow-hidden">
       {/* Badge Type */}
       <div className={`absolute top-4 left-4 z-10 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider backdrop-blur-md ${isAudio ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'}`}>
-        {isAudio ? 'Audio' : 'Dokumentasi'}
+        {categoryLabel}
       </div>
 
       {/* Image Preview */}
@@ -58,7 +60,7 @@ export default function PackageCard({ pkg, onEdit, onDelete, onBooking }: Packag
         </div>
 
         {/* List Hasil Cetakan (Hanya untuk Dokumentasi) */}
-        {!isAudio && printsList.length > 0 && (
+        {String(pkg.type).toLowerCase() === "dokumentasi" && printsList.length > 0 && (
           <div className="mt-4 pt-4 border-t border-white/[0.05]">
             <p className="text-[10px] text-amber-500/70 mb-2 font-medium uppercase tracking-wider">Hasil Cetak:</p>
             <div className="space-y-1.5">

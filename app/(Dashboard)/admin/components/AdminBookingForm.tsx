@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { X, Save, Plus, Trash2, Loader2, Calendar, MapPin, Clock, CheckCircle2, Package as PackageIcon } from "lucide-react";
 import { generateInvoiceNumberAction, createAdminBookingAction } from "@/app/actions/adminBookings";
+import { getPackageCategoryLabel } from "@/lib/package-categories";
 import { extractDateKeysFromEventDetails } from "@/lib/bookingCalendar/extractDateKeysFromEventDetails";
 import { validateBookingEventDatesAction } from "@/app/actions/bookingCalendarActions";
 import AlertModal from "./AlertModal";
@@ -147,7 +148,7 @@ export default function AdminBookingForm({ userId, selectedPackage, allPackages 
   // Helper untuk merender isi kartu paket tambahan
   const renderCardContent = (pkg: any) => {
     const isSelected = selectedAddonIds.includes(pkg.id);
-    const isAudio = pkg.type === "audio";
+    const isAudio = String(pkg.type).toLowerCase() === "audio";
     const features = typeof pkg.features === 'string' ? JSON.parse(pkg.features) : (pkg.features || []);
 
     return (
@@ -161,7 +162,7 @@ export default function AdminBookingForm({ userId, selectedPackage, allPackages 
         {/* Badge & Check */}
         <div className="flex justify-between items-start mb-4">
           <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-tighter border ${isAudio ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' : 'bg-purple-500/10 text-purple-400 border-purple-500/20'}`}>
-            {isAudio ? 'Audio' : 'Visual'}
+            {getPackageCategoryLabel(pkg.type)}
           </span>
           <div className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${isSelected ? 'bg-amber-500 border-amber-500' : 'border-white/10'}`}>
             {isSelected && <CheckCircle2 className="w-3.5 h-3.5 text-black" />}

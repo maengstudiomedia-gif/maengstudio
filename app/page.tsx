@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { getPublicPackages, getClientShowcase } from "@/app/actions/publicActions";
 import PublicBookingCalendarSection from "@/app/components/bookingCalendar/PublicBookingCalendarSection";
+import { PACKAGE_CATEGORIES, getPackageCategoryLabel } from "@/lib/package-categories";
 
 // Fungsi Helper Format Rupiah
 function formatRupiah(value: number) {
@@ -24,6 +25,20 @@ function formatRupiah(value: number) {
     currency: "IDR",
     maximumFractionDigits: 0,
   }).format(Number(value || 0));
+}
+
+function groupPackagesByCategory(packages: any[]) {
+  const groups = PACKAGE_CATEGORIES.map((category) => ({
+    ...category,
+    packages: packages.filter((pkg) => String(pkg.type).toLowerCase() === category.value),
+  })).filter((group) => group.packages.length > 0);
+  const uncategorized = packages.filter(
+    (pkg) => !PACKAGE_CATEGORIES.some((category) => String(pkg.type).toLowerCase() === category.value)
+  );
+
+  return uncategorized.length > 0
+    ? [...groups, { value: "other", label: "Lainnya", packages: uncategorized }]
+    : groups;
 }
 
 export default function LandingPage() {
@@ -124,10 +139,17 @@ export default function LandingPage() {
         {loading ? (
           <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {packages.map((pkg) => {
+          <div className="space-y-14">
+            {groupPackagesByCategory(packages).map((group) => (
+              <div key={group.value}>
+                <div className="mb-6 flex items-center gap-4">
+                  <h3 className="text-2xl font-bold">{group.label}</h3>
+                  <div className="h-px flex-1 bg-white/10" />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {group.packages.map((pkg) => {
               // Set gambar default
-              const fallbackImg = pkg.type === "Audio" 
+              const fallbackImg = String(pkg.type).toLowerCase() === "audio"
                 ? "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?q=80&w=800&auto=format&fit=crop" 
                 : "https://images.unsplash.com/photo-1511285560929-80b456fea0bc?q=80&w=800&auto=format&fit=crop"; 
                 
@@ -151,8 +173,8 @@ export default function LandingPage() {
                     />
                     <div className="absolute top-4 left-4">
                       <span className="px-3 py-1.5 bg-black/50 backdrop-blur-md text-blue-400 text-[10px] font-bold uppercase tracking-widest rounded-full border border-white/10 flex items-center gap-1.5">
-                        {pkg.type === "Audio" ? <Mic2 className="w-3 h-3" /> : <img src="/favicon.ico" alt="Maeng Studio" className="w-3 h-3 object-contain" />}
-                        {pkg.type}
+                        {String(pkg.type).toLowerCase() === "audio" ? <Mic2 className="w-3 h-3" /> : <img src="/favicon.ico" alt="Maeng Studio" className="w-3 h-3 object-contain" />}
+                        {getPackageCategoryLabel(pkg.type)}
                       </span>
                     </div>
                   </div>
@@ -211,7 +233,10 @@ export default function LandingPage() {
 
                 </div>
               );
-            })}
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </section>

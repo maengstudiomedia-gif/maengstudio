@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom"; // IMPORT BARU
 import { Save, Loader2, X, Upload } from "lucide-react";
 import { createPackageAction, updatePackageAction } from "@/app/actions/packages";
+import { PACKAGE_CATEGORIES, getPackageCategoryValue, type PackageCategory } from "@/lib/package-categories";
 
 interface PackageFormProps {
   initialData?: any;
@@ -21,7 +22,7 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const editingId = initialData?.id || null;
-  const [type, setType] = useState<"audio" | "dokumentasi">(initialData?.type || "audio");
+  const [type, setType] = useState<PackageCategory>(getPackageCategoryValue(initialData?.type) || "audio");
   const [name, setName] = useState(initialData?.name || "");
   const [price, setPrice] = useState(initialData?.price?.toString() || "");
   const [description, setDescription] = useState(initialData?.description || "");
@@ -84,9 +85,17 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
             <div className="space-y-6">
                 <div>
                   <label className="block text-sm text-white/50 mb-3">Jenis Paket</label>
-                  <div className="flex space-x-4">
-                    <button type="button" onClick={() => setType("audio")} className={`flex-1 py-3 rounded-xl border transition-all ${type === 'audio' ? 'bg-amber-500/10 border-amber-500 text-amber-500' : 'bg-white/5 border-white/5 text-white/40'}`}>Audio System</button>
-                    <button type="button" onClick={() => setType("dokumentasi")} className={`flex-1 py-3 rounded-xl border transition-all ${type === 'dokumentasi' ? 'bg-amber-500/10 border-amber-500 text-amber-500' : 'bg-white/5 border-white/5 text-white/40'}`}>Dokumentasi</button>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {PACKAGE_CATEGORIES.map((category) => (
+                      <button
+                        key={category.value}
+                        type="button"
+                        onClick={() => setType(category.value)}
+                        className={`py-3 rounded-xl border transition-all ${type === category.value ? 'bg-amber-500/10 border-amber-500 text-amber-500' : 'bg-white/5 border-white/5 text-white/40'}`}
+                      >
+                        {category.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
 

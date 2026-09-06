@@ -9,6 +9,7 @@ import PackageForm from "./PackageForm";
 import AdminBookingForm from "./AdminBookingForm";
 import AlertModal from "./AlertModal";
 import { createBrowserClient } from "@supabase/ssr"; // Tambahan untuk mengambil session user
+import { PACKAGE_CATEGORIES } from "@/lib/package-categories";
 
 export default function AdminPackages() {
   const [mounted, setMounted] = useState(false);
@@ -74,6 +75,14 @@ export default function AdminPackages() {
   const handleFormSuccess = () => { setShowForm(false); setEditingPackage(null); fetchPackages(); };
   const handleFormCancel = () => { setShowForm(false); setEditingPackage(null); };
 
+  const packageGroups = PACKAGE_CATEGORIES.map((category) => ({
+    ...category,
+    packages: packages.filter((pkg) => String(pkg.type).toLowerCase() === category.value),
+  })).filter((group) => group.packages.length > 0);
+  const uncategorizedPackages = packages.filter(
+    (pkg) => !PACKAGE_CATEGORIES.some((category) => String(pkg.type).toLowerCase() === category.value)
+  );
+
   const openDeleteModal = (pkg: any) => {
     setDeleteModal({
       isOpen: true, isDeleting: false, isDone: false,
@@ -134,7 +143,7 @@ export default function AdminPackages() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white/[0.02] p-6 rounded-2xl border border-white/[0.05]">
         <div>
           <h2 className="text-2xl font-bold text-white">Katalog Paket</h2>
-          <p className="text-white/50 text-sm">Kelola semua layanan Audio & Dokumentasi Anda</p>
+          <p className="text-white/50 text-sm">Kelola semua kategori layanan Anda</p>
         </div>
         <button onClick={handleAddNew} className="flex items-center justify-center space-x-2 bg-amber-500 hover:bg-amber-400 text-black px-6 py-3 rounded-xl font-bold transition-all shadow-lg shadow-amber-500/20">
           <Plus className="w-5 h-5" />
@@ -149,16 +158,39 @@ export default function AdminPackages() {
         ) : packages.length === 0 ? (
           <div className="text-center py-16 bg-white/[0.01] border border-dashed border-white/10 rounded-2xl text-white/30">Belum ada paket yang dibuat.</div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {packages.map((pkg) => (
-              <PackageCard 
-                key={pkg.id} 
-                pkg={pkg} 
-                onEdit={() => handleEdit(pkg)} 
-                onDelete={() => openDeleteModal(pkg)} 
-                onBooking={() => setBookingPackage(pkg)} 
-              />
+          <div className="space-y-10">
+            {packageGroups.map((group) => (
+              <div key={group.value}>
+                <h3 className="mb-4 text-lg font-bold text-white">{group.label}</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {group.packages.map((pkg) => (
+                    <PackageCard
+                      key={pkg.id}
+                      pkg={pkg}
+                      onEdit={() => handleEdit(pkg)}
+                      onDelete={() => openDeleteModal(pkg)}
+                      onBooking={() => setBookingPackage(pkg)}
+                    />
+                  ))}
+                </div>
+              </div>
             ))}
+            {uncategorizedPackages.length > 0 && (
+              <div>
+                <h3 className="mb-4 text-lg font-bold text-white">Lainnya</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {uncategorizedPackages.map((pkg) => (
+                    <PackageCard
+                      key={pkg.id}
+                      pkg={pkg}
+                      onEdit={() => handleEdit(pkg)}
+                      onDelete={() => openDeleteModal(pkg)}
+                      onBooking={() => setBookingPackage(pkg)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </section>
