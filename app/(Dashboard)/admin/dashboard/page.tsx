@@ -2,7 +2,22 @@
 
 import { useEffect, useMemo, useState } from "react";
 // --- TAMBAHAN: Import Send dan LinkIcon dari lucide-react ---
-import { ShieldAlert, Search, Loader2, X, ReceiptText, TrendingUp, Users, Link as LinkIcon, Send } from "lucide-react";
+import { 
+  ShieldAlert, 
+  Search, 
+  Loader2, 
+  X, 
+  ReceiptText, 
+  TrendingUp, 
+  Users, 
+  Link as LinkIcon, 
+  Send,
+  ClipboardPaste,
+  ExternalLink,
+  CheckCircle2,
+  AlertCircle,
+  FolderOpen
+} from "lucide-react";
 import { getAdminBookingsAction } from "@/app/actions/adminBookings";
 import { getLeadsAction } from "@/app/actions/leadsActions"; // <-- Import sudah disesuaikan
 import { getPublicPackages } from "@/app/actions/publicActions";
@@ -486,9 +501,13 @@ export default function AdminDashboardPage() {
                         <th className="px-6 py-4">Paket</th>
                         <th className="px-6 py-4 text-right">Info Pembayaran</th>
                         {/* --- TAMBAHAN: KOLOM HEADER BARU UNTUK FITUR SORTIR --- */}
-                        <th className="w-[500px] min-w-[500px] px-6 py-4 text-center border-l border-white/5">
-                          Aksi (Sortir Foto)
-                          <p className="mt-1 text-[10px] font-normal normal-case text-white/40">{driveStatus}</p>
+                        <th className="w-[540px] min-w-[540px] px-6 py-4 text-left border-l border-white/5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-semibold text-white/80 tracking-wide text-xs">Aksi (Sortir Foto)</span>
+                            <span className="text-[10px] font-normal normal-case text-amber-400/80 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-md">
+                              {driveStatus}
+                            </span>
+                          </div>
                         </th>
                       </tr>
                     </thead>
@@ -525,53 +544,139 @@ export default function AdminDashboardPage() {
                               </td>
                               
                               {/* --- TAMBAHAN: FORM INPUT DAN TOMBOL KIRIM UNTUK ADMIN --- */}
-                              <td className="w-[500px] min-w-[500px] px-5 py-4 border-l border-white/5 align-top">
-                                <div className="mx-auto flex w-full max-w-[460px] flex-col gap-3">
-                                  <div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2">
-                                    <select 
-                                      value={inputData.albumType}
-                                      onChange={(e) => handleInputChange(b.id, "albumType", e.target.value)}
-                                      className="min-h-12 w-full bg-black/50 border border-white/10 rounded-xl py-2.5 px-3 text-sm text-white focus:border-amber-500 outline-none"
-                                    >
-                                      <option value="10_sheet">Kolase 10 Sheet</option>
-                                      <option value="15_sheet">Kolase 15 Sheet</option>
-                                    </select>
-                                    <input
-                                      type="number"
-                                      min={1}
-                                      max={DEFAULT_MAX_PHOTOS}
-                                      value={inputData.maxPhotos}
-                                      onChange={(e) => handleInputChange(b.id, "maxPhotos", e.target.value)}
-                                      className="min-h-12 w-full bg-black/50 border border-white/10 rounded-xl py-2.5 px-3 text-sm text-white focus:border-amber-500 outline-none"
-                                      title="Jumlah maksimal foto yang dapat dipilih oleh konsumen"
-                                      placeholder="Jumlah foto"
-                                    />
+                              <td className="w-[540px] min-w-[540px] px-5 py-4 border-l border-white/5 align-top">
+                                <div className="mx-auto flex w-full flex-col gap-3.5 bg-white/[0.02] border border-white/[0.08] p-4 rounded-2xl hover:border-white/15 transition-all">
+                                  {/* Pengaturan Album & Kuota Foto */}
+                                  <div className="grid grid-cols-2 gap-2.5">
+                                    <div>
+                                      <label className="block text-[11px] font-medium text-white/60 mb-1.5">
+                                        Tipe Album
+                                      </label>
+                                      <select 
+                                        value={inputData.albumType}
+                                        onChange={(e) => handleInputChange(b.id, "albumType", e.target.value)}
+                                        className="h-10 w-full bg-black/60 border border-white/10 rounded-xl px-3 text-xs text-white focus:border-amber-500 outline-none transition-colors cursor-pointer"
+                                      >
+                                        <option value="10_sheet">Kolase 10 Sheet</option>
+                                        <option value="15_sheet">Kolase 15 Sheet</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-[11px] font-medium text-white/60 mb-1.5">
+                                        Maks. Foto Dipilih
+                                      </label>
+                                      <div className="relative">
+                                        <input
+                                          type="number"
+                                          min={1}
+                                          max={DEFAULT_MAX_PHOTOS}
+                                          value={inputData.maxPhotos}
+                                          onChange={(e) => handleInputChange(b.id, "maxPhotos", e.target.value)}
+                                          className="h-10 w-full bg-black/60 border border-white/10 rounded-xl px-3 pr-10 text-xs text-white focus:border-amber-500 outline-none transition-colors"
+                                          title="Jumlah maksimal foto yang dapat dipilih oleh konsumen"
+                                          placeholder="135"
+                                        />
+                                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-white/40 pointer-events-none">
+                                          foto
+                                        </span>
+                                      </div>
+                                    </div>
                                   </div>
-                                  <div className="flex flex-col gap-3 min-[520px]:flex-row">
-                                    <input
-                                      type="url"
-                                      placeholder="Paste Link G-Drive..."
-                                      value={inputData.link}
-                                      onChange={(e) => handleInputChange(b.id, "link", e.target.value)}
-                                      className="min-h-12 min-w-0 w-full flex-1 bg-black/50 border border-white/10 rounded-xl py-3 px-4 text-sm text-white focus:border-blue-500 outline-none"
-                                    />
+
+                                  {/* Input Kolom Link Google Drive yang Lega & User Friendly */}
+                                  <div className="space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                      <label className="text-[11px] font-medium text-white/70 flex items-center gap-1.5">
+                                        <FolderOpen className="w-3.5 h-3.5 text-amber-400" />
+                                        <span>Link Google Drive Folder Foto Mentah</span>
+                                      </label>
+                                      <div className="flex items-center gap-1.5">
+                                        {inputData.link && (
+                                          <a
+                                            href={inputData.link}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center gap-1 text-[10px] text-blue-400 hover:text-blue-300 transition-colors bg-blue-500/10 px-2 py-0.5 rounded"
+                                            title="Buka link di tab baru"
+                                          >
+                                            <ExternalLink className="w-2.5 h-2.5" />
+                                            Buka Folder
+                                          </a>
+                                        )}
+                                        <button
+                                          type="button"
+                                          onClick={async () => {
+                                            try {
+                                              const text = await navigator.clipboard.readText();
+                                              if (text) {
+                                                handleInputChange(b.id, "link", text.trim());
+                                              }
+                                            } catch (err) {
+                                              console.error("Gagal membaca clipboard:", err);
+                                            }
+                                          }}
+                                          className="inline-flex items-center gap-1 text-[10px] text-amber-400 hover:text-amber-300 transition-colors bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 px-2 py-0.5 rounded font-medium"
+                                          title="Paste langsung dari clipboard"
+                                        >
+                                          <ClipboardPaste className="w-2.5 h-2.5" />
+                                          Paste Otomatis
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {/* Kolom Textarea yang Lega & Nyaman */}
+                                    <div className="relative group/input">
+                                      <textarea
+                                        rows={2}
+                                        placeholder="Paste link folder Google Drive di sini (https://drive.google.com/drive/folders/...)"
+                                        value={inputData.link}
+                                        onChange={(e) => handleInputChange(b.id, "link", e.target.value)}
+                                        className="w-full bg-black/60 border border-white/15 rounded-xl py-2 px-3 text-xs text-white placeholder:text-white/30 focus:border-blue-500 focus:bg-black/80 outline-none transition-all resize-none leading-relaxed font-mono"
+                                      />
+                                      {inputData.link && (
+                                        <button
+                                          type="button"
+                                          onClick={() => handleInputChange(b.id, "link", "")}
+                                          className="absolute right-2.5 bottom-2.5 p-1 rounded-md text-white/40 hover:text-white/80 hover:bg-white/10 transition-colors"
+                                          title="Hapus tautan"
+                                        >
+                                          <X className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Tombol Aksi Kirim Link WhatsApp */}
+                                  <div className="pt-0.5 flex items-center justify-between gap-3">
+                                    <div className="text-[10px] text-white/45 flex items-center gap-1.5">
+                                      {inputData.sendCount > 0 ? (
+                                        <span className="text-amber-300/90 font-medium inline-flex items-center gap-1">
+                                          <CheckCircle2 className="w-3 h-3 text-amber-400" />
+                                          Sudah dikirim {inputData.sendCount}x (Maks. 2x)
+                                        </span>
+                                      ) : (
+                                        <span className="text-white/40">
+                                          Bisa kirim ulang hingga 2x
+                                        </span>
+                                      )}
+                                    </div>
+
                                     <button
                                       onClick={() => handleKirimLink(b.id, b.client_name)}
-                                      className="min-h-12 w-full shrink-0 bg-blue-600 hover:bg-blue-500 text-white px-5 rounded-xl flex items-center justify-center gap-2 text-sm font-medium transition-colors min-[520px]:w-auto"
-                                      title="Generate & Kirim Link WA"
+                                      disabled={!inputData.link || inputData.sendCount >= 2}
+                                      className={`h-9 px-4 rounded-xl flex items-center justify-center gap-2 text-xs font-semibold transition-all shadow-sm shrink-0 ${
+                                        !inputData.link
+                                          ? "bg-white/10 text-white/40 cursor-not-allowed"
+                                          : inputData.sendCount >= 2
+                                          ? "bg-rose-500/20 text-rose-300/60 border border-rose-500/20 cursor-not-allowed"
+                                          : "bg-emerald-600 hover:bg-emerald-500 text-white active:scale-95 hover:shadow-emerald-500/20 hover:shadow-md"
+                                      }`}
+                                      title={inputData.sendCount >= 2 ? "Batas pengiriman link tercapai (2x)" : "Generate & Kirim Link Portal via WhatsApp"}
                                     >
                                       <Send className="w-3.5 h-3.5" />
-                                      <span className="min-[520px]:hidden">Kirim Link WhatsApp</span>
+                                      <span>Kirim WA ke Klien</span>
                                     </button>
                                   </div>
-                                  <p className="text-[10px] text-white/40">
-                                    Konsumen bisa memilih hingga {inputData.maxPhotos} foto. Link dapat dikirim ulang sampai 2 kali.
-                                  </p>
-                                  {inputData.sendCount > 0 && (
-                                    <p className="text-[10px] text-amber-300">
-                                      Link sudah dikirim {inputData.sendCount} kali.
-                                    </p>
-                                  )}
                                 </div>
                               </td>
                               {/* --- AKHIR DARI TAMBAHAN FITUR SORTIR --- */}
