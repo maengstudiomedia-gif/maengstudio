@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { drive, googleAuth } from "@/lib/google-drive";
+import { supabaseAdmin } from "@/app/actions/adminBookings/utils";
 
 export const runtime = "nodejs";
 
@@ -39,6 +40,23 @@ async function fetchFullImage(fileId: string) {
   };
 }
 
+function getSortirNotes(notes: unknown): { portalToken?: string; sourceFolderId?: string } | null {
+  if (!notes) return null;
+  let source: unknown = notes;
+  if (typeof notes === "string") {
+    try {
+      source = JSON.parse(notes) as unknown;
+    } catch {
+      return null;
+    }
+  }
+  if (!source || typeof source !== "object") return null;
+  const sortir = (source as { sortir?: unknown }).sortir;
+  return sortir && typeof sortir === "object"
+    ? (sortir as { portalToken?: string; sourceFolderId?: string })
+    : null;
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ fileId: string }> }
@@ -46,12 +64,37 @@ export async function GET(
   const { fileId } = await context.params;
   const useThumbnail = request.nextUrl.searchParams.get("thumb") === "1";
   const isDownload = request.nextUrl.searchParams.get("download") === "1";
+  const bookingId = request.nextUrl.searchParams.get("booking");
+  const portalToken = request.nextUrl.searchParams.get("portal");
 
-  if (!fileId) {
+  if (!fileId || !bookingId || !portalToken) {
     return NextResponse.json({ error: "File ID required" }, { status: 400 });
   }
 
   try {
+    const { data: booking } = await supabaseAdmin
+      .from("bookings")
+      .select("notes")
+      .eq("id", bookingId)
+      .single();
+    const sortirNotes = getSortirNotes(booking?.notes);
+    if (!sortirNotes?.portalToken || sortirNotes.portalToken !== portalToken) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const fileMeta = await drive.files.get({
+      fileId,
+      fields: "parents, appProperties, mimeType, trashed",
+      supportsAllDrives: true,
+    });
+    const parents = fileMeta.data.parents ?? [];
+    const belongsToBooking =
+      parents.includes(sortirNotes.sourceFolderId || "") ||
+      fileMeta.data.appProperties?.maeng_sortir_booking === bookingId;
+    if (fileMeta.data.trashed || !fileMeta.data.mimeType?.startsWith("image/") || !belongsToBooking) {
+      return NextResponse.json({ error: "Image not available" }, { status: 404 });
+    }
+
     let fileName = `foto-${fileId}`;
 
     if (isDownload) {

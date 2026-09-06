@@ -6,7 +6,7 @@ import { ShieldAlert, Search, Loader2, X, ReceiptText, TrendingUp, Users, Link a
 import { getAdminBookingsAction } from "@/app/actions/adminBookings";
 import { getLeadsAction } from "@/app/actions/leadsActions"; // <-- Import sudah disesuaikan
 import { getPublicPackages } from "@/app/actions/publicActions";
-import { checkGoogleDriveConfigAction } from "@/app/actions/driveActions";
+import { checkGoogleDriveConfigAction, persistPortalConfigAction } from "@/app/actions/driveActions";
 import AdminBookingCalendarPanel from "@/app/components/bookingCalendar/AdminBookingCalendarPanel";
 import { getAppBaseUrl } from "@/lib/app-url";
 
@@ -95,8 +95,19 @@ export default function AdminDashboardPage() {
       return alert("Link hanya bisa dikirim sebanyak 2 kali. Jika perlu, buat pengaturan ulang link baru.");
     }
 
-    const baseUrl = getAppBaseUrl();
-    const clientPortalUrl = `${baseUrl}/sortir/${bookingId}?drive=${encodeURIComponent(finalizedInput.link)}&max=${finalizedInput.maxPhotos}&name=${encodeURIComponent(clientName)}`;
+    const configResult = await persistPortalConfigAction(bookingId, {
+      driveLink: finalizedInput.link,
+      maxPhotos: finalizedInput.maxPhotos,
+      clientName,
+      albumType: finalizedInput.albumType,
+      incrementSendCount: true,
+    });
+
+    if (!configResult.success || !configResult.shortPortalUrl) {
+      return alert(configResult.message || "Konfigurasi portal gagal disimpan.");
+    }
+
+    const clientPortalUrl = configResult.shortPortalUrl;
 
     const textWa = `Halo kak ${clientName},\n\nBerikut link folder untuk melihat galeri foto mentah: ${finalizedInput.link}\n\nKakak mendapat paket Cetak ${finalizedInput.albumType === "10_sheet" ? "10 Sheet" : "15 Sheet"} (Maksimal ${finalizedInput.maxPhotos} foto).\n\nSilakan pilih foto langsung melalui galeri interaktif kami di link berikut:\n${clientPortalUrl}\n\nTerima kasih!`;
 

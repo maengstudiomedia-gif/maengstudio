@@ -17,6 +17,7 @@ import {
   getSortirSessionAction,
   moveSinglePhotoAction,
   revertMovedPhotoAction,
+  savePendingSelectionAction,
 } from "@/app/actions/driveActions";
 import AlertModal from "@/app/(Dashboard)/admin/components/AlertModal";
 
@@ -28,10 +29,29 @@ type Photo = {
   url: string;
   orientation: PhotoOrientation;
 };
+type PhotoFilter = "all" | "selected" | "available";
 
 const DENSE_ALBUM_THRESHOLD = 100;
 const HARD_ALBUM_LIMIT = 135;
 const LEGACY_LOW_CAP = 60;
+
+function normalizeMaxPhotos(raw: number): number {
+  const normalized = Number.isFinite(raw) ? raw : HARD_ALBUM_LIMIT;
+  return Math.min(
+    HARD_ALBUM_LIMIT,
+    Math.max(1, normalized <= LEGACY_LOW_CAP ? HARD_ALBUM_LIMIT : normalized)
+  );
+}
+
+function buildFallbackPhoto(id: string, bookingId: string, portalToken: string, name?: string): Photo {
+  return {
+    id,
+    name: name || `foto-${id.slice(0, 8)}`,
+    thumbnail: `/api/drive-image/${id}?thumb=1&booking=${encodeURIComponent(bookingId)}&portal=${encodeURIComponent(portalToken)}`,
+    url: `/api/drive-image/${id}?booking=${encodeURIComponent(bookingId)}&portal=${encodeURIComponent(portalToken)}`,
+    orientation: "portrait",
+  };
+}
 
 export default function ClientGalleryPortal({
   params,
@@ -40,16 +60,13 @@ export default function ClientGalleryPortal({
 }) {
   const { bookingId } = use(params);
   const searchParams = useSearchParams();
+  const portalToken = searchParams.get("token") || "";
 
-  const rawMaxPhotos = Number.parseInt(searchParams.get("max") || String(HARD_ALBUM_LIMIT), 10);
-  const normalizedMaxPhotos = Number.isFinite(rawMaxPhotos) ? rawMaxPhotos : HARD_ALBUM_LIMIT;
-  const maxPhotos = Math.min(
-    HARD_ALBUM_LIMIT,
-    Math.max(1, normalizedMaxPhotos <= LEGACY_LOW_CAP ? HARD_ALBUM_LIMIT : normalizedMaxPhotos)
-  );
-
-  const folderLinkDariAdmin = searchParams.get("drive") || "";
-  const clientName = searchParams.get("name") || "Klien";
+  const [resolvedDriveLink, setResolvedDriveLink] = useState("");
+  const [resolvedClientName, setResolvedClientName] = useState("Klien");
+  const [resolvedMaxPhotos, setResolvedMaxPhotos] = useState(HARD_ALBUM_LIMIT);
+  const [sessionLoaded, setSessionLoaded] = useState(false);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -68,7 +85,16 @@ export default function ClientGalleryPortal({
   const [confirmRevertId, setConfirmRevertId] = useState<string | null>(null);
   const [pendingSelectionId, setPendingSelectionId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [galleryError, setGalleryError] = useState<string | null>(null);
+  const [galleryRetry, setGalleryRetry] = useState(0);
+  const [photoSearch, setPhotoSearch] = useState("");
+  const [photoFilter, setPhotoFilter] = useState<PhotoFilter>("all");
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [pendingSaveStatus, setPendingSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  const maxPhotos = resolvedMaxPhotos;
+  const folderLinkDariAdmin = resolvedDriveLink;
+  const clientName = resolvedClientName;
 
   const movedCount = movedFileIds.length;
   const totalCommitted = movedCount + selectedIds.length;
@@ -77,21 +103,57 @@ export default function ClientGalleryPortal({
   const shouldWarnDenseAlbum = maxPhotos > DENSE_ALBUM_THRESHOLD && totalCommitted >= DENSE_ALBUM_THRESHOLD;
   const selectedPhotos = useMemo(
     () =>
-      selectedIds
-        .map((id) => photos.find((photo) => photo.id === id))
-        .filter((photo): photo is Photo => Boolean(photo)),
-    [photos, selectedIds]
+      selectedIds.map((id) => {
+        const fromGallery = photos.find((photo) => photo.id === id);
+        if (fromGallery) return fromGallery;
+        const fromMoved = movedPhotos.find((photo) => photo.id === id);
+        if (fromMoved) return fromMoved;
+        return buildFallbackPhoto(id, bookingId, portalToken);
+      }),
+    [photos, selectedIds, movedPhotos, bookingId, portalToken]
   );
 
+  const displayMovedPhotos = useMemo(() => {
+    if (movedPhotos.length >= movedFileIds.length) return movedPhotos;
+    const photoById = new Map(movedPhotos.map((photo) => [photo.id, photo]));
+    return movedFileIds.map((id) => photoById.get(id) ?? buildFallbackPhoto(id, bookingId, portalToken));
+  }, [movedPhotos, movedFileIds, bookingId, portalToken]);
+
+  const visiblePhotos = useMemo(() => {
+    const normalizedSearch = photoSearch.trim().toLowerCase();
+    return photos.filter((photo) => {
+      const matchesSearch = !normalizedSearch || photo.name.toLowerCase().includes(normalizedSearch);
+      const matchesFilter =
+        photoFilter === "all" ||
+        (photoFilter === "selected" && selectedIds.includes(photo.id)) ||
+        (photoFilter === "available" && !selectedIds.includes(photo.id) && !movedFileIds.includes(photo.id));
+      return matchesSearch && matchesFilter;
+    });
+  }, [photos, photoSearch, photoFilter, selectedIds, movedFileIds]);
+
+  const previewPhotos = useMemo(() => {
+    const photosById = new Map<string, Photo>();
+    [...photos, ...displayMovedPhotos].forEach((photo) => photosById.set(photo.id, photo));
+    return Array.from(photosById.values());
+  }, [photos, displayMovedPhotos]);
+
+  const navigatePreview = (direction: -1 | 1) => {
+    if (!zoomedPhoto || previewPhotos.length < 2) return;
+    const currentIndex = previewPhotos.findIndex((photo) => photo.id === zoomedPhoto.id);
+    if (currentIndex < 0) return;
+    const nextIndex = (currentIndex + direction + previewPhotos.length) % previewPhotos.length;
+    setZoomedPhoto(previewPhotos[nextIndex]);
+  };
+
   const refreshSession = useCallback(async () => {
-    const session = await getSortirSessionAction(bookingId);
+    const session = await getSortirSessionAction(bookingId, portalToken);
     setMovedPhotos(session.movedPhotos);
     setMovedFileIds(session.movedFileIds);
     if (session.moveStatus === "completed") {
       setIsSuccess(true);
     }
     return session;
-  }, [bookingId]);
+  }, [bookingId, portalToken]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setIsPageReady(true), 180);
@@ -99,27 +161,88 @@ export default function ClientGalleryPortal({
   }, []);
 
   useEffect(() => {
-    if (!folderLinkDariAdmin) return;
-    const fetchPhotos = async () => {
+    let cancelled = false;
+
+    const initializePortal = async () => {
       try {
-        const [drivePhotos, session] = await Promise.all([
-          getPhotosFromDriveAction(folderLinkDariAdmin),
-          getSortirSessionAction(bookingId),
-        ]);
-        setPhotos(drivePhotos);
+        const session = await getSortirSessionAction(bookingId, portalToken);
+        if (cancelled) return;
+
+        const driveLink = session.driveLink || "";
+        const name = session.clientName || "Klien";
+        const max =
+          session.maxPhotos ? normalizeMaxPhotos(session.maxPhotos) : HARD_ALBUM_LIMIT;
+
+        setResolvedDriveLink(driveLink);
+        setResolvedClientName(name);
+        setResolvedMaxPhotos(max);
         setMovedPhotos(session.movedPhotos);
         setMovedFileIds(session.movedFileIds);
+
+        const restoredPending = session.pendingFileIds.filter(
+          (id) => !session.movedFileIds.includes(id)
+        );
+        if (restoredPending.length > 0) {
+          setSelectedIds(restoredPending);
+        }
+
         if (session.moveStatus === "completed") {
           setIsSuccess(true);
         }
+
+        if (!driveLink) {
+          setConfigError(
+            "Portal belum dikonfigurasi. Hubungi admin Maeng Studio untuk mendapatkan link yang valid."
+          );
+          return;
+        }
+
+        try {
+          const drivePhotos = await getPhotosFromDriveAction(bookingId, portalToken);
+          if (cancelled) return;
+          setPhotos(drivePhotos);
+          setGalleryError(null);
+        } catch {
+          if (!cancelled) {
+            setGalleryError("Galeri gagal dimuat. Periksa koneksi lalu coba lagi.");
+          }
+        }
       } catch {
-        setErrorMessage("Gagal memuat foto dari Google Drive. Pastikan akses folder sudah Editor.");
+        if (!cancelled) {
+          setErrorMessage("Gagal memuat foto dari Google Drive. Pastikan akses folder sudah Editor.");
+        }
       } finally {
-        setIsLoadingPhotos(false);
+        if (!cancelled) {
+          setIsLoadingPhotos(false);
+          setSessionLoaded(true);
+        }
       }
     };
-    void fetchPhotos();
-  }, [folderLinkDariAdmin, bookingId]);
+
+    void initializePortal();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingId, portalToken, galleryRetry]);
+
+  useEffect(() => {
+    if (!sessionLoaded || isSubmitting) return;
+
+    let active = true;
+    setPendingSaveStatus("saving");
+
+    const timer = window.setTimeout(async () => {
+      const result = await savePendingSelectionAction(bookingId, portalToken, selectedIds);
+      if (!active) return;
+      setPendingSaveStatus(result.success ? "saved" : "error");
+    }, 800);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [selectedIds, bookingId, portalToken, sessionLoaded, isSubmitting]);
 
   const togglePhotoSelection = (id: string) => {
     if (movedFileIds.includes(id)) return;
@@ -164,7 +287,9 @@ export default function ClientGalleryPortal({
   const handleDownload = async (photo: Photo) => {
     setDownloadingId(photo.id);
     try {
-      const response = await fetch(`${photo.url}?download=1`);
+      const downloadUrl = new URL(photo.url, window.location.origin);
+      downloadUrl.searchParams.set("download", "1");
+      const response = await fetch(downloadUrl);
       if (!response.ok) throw new Error("Download failed");
       const blob = await response.blob();
       const objectUrl = URL.createObjectURL(blob);
@@ -198,10 +323,8 @@ export default function ClientGalleryPortal({
 
         const result = await moveSinglePhotoAction(
           bookingId,
-          clientName,
+          portalToken,
           fileId,
-          folderLinkDariAdmin,
-          maxPhotos
         );
 
         if (!result.success) {
@@ -210,7 +333,7 @@ export default function ClientGalleryPortal({
               `Gagal pada foto ke-${i + 1}. ${successCount} foto berhasil dipindahkan sebelumnya.`
           );
           await refreshSession();
-          const refreshedPhotos = await getPhotosFromDriveAction(folderLinkDariAdmin);
+          const refreshedPhotos = await getPhotosFromDriveAction(bookingId, portalToken);
           setPhotos(refreshedPhotos);
           setSelectedIds(idsToMove.slice(i));
           return;
@@ -229,8 +352,9 @@ export default function ClientGalleryPortal({
       }
 
       setSelectedIds([]);
+      void savePendingSelectionAction(bookingId, portalToken, []);
       const session = await refreshSession();
-      const refreshedPhotos = await getPhotosFromDriveAction(folderLinkDariAdmin);
+      const refreshedPhotos = await getPhotosFromDriveAction(bookingId, portalToken);
       setPhotos(refreshedPhotos);
 
       if (session.moveStatus === "completed" || latestMovedIds.length >= maxPhotos) {
@@ -253,6 +377,11 @@ export default function ClientGalleryPortal({
       return;
     }
 
+    setShowIncompleteModal(true);
+  };
+
+  const confirmSubmit = () => {
+    setShowIncompleteModal(false);
     void runSubmit();
   };
 
@@ -272,10 +401,8 @@ export default function ClientGalleryPortal({
     try {
       const result = await revertMovedPhotoAction(
         bookingId,
-        clientName,
+        portalToken,
         fileId,
-        folderLinkDariAdmin,
-        maxPhotos
       );
 
       if (!result.success) {
@@ -290,7 +417,7 @@ export default function ClientGalleryPortal({
 
       const [session, refreshedPhotos] = await Promise.all([
         refreshSession(),
-        getPhotosFromDriveAction(folderLinkDariAdmin),
+        getPhotosFromDriveAction(bookingId, portalToken),
       ]);
       setMovedPhotos(session.movedPhotos);
       setPhotos(refreshedPhotos);
@@ -325,22 +452,113 @@ export default function ClientGalleryPortal({
 
   if (isSuccess) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center p-4 text-center">
-        <div className="bg-white/[0.03] border border-white/10 p-8 rounded-3xl max-w-md w-full">
-          <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-light text-white mb-2">Terima Kasih, {clientName}!</h2>
-          <p className="text-white/60 text-sm mb-6">
-            {movedCount || maxPhotos} foto telah berhasil dipindahkan ke folder
-            <span className="text-emerald-400/90"> Foto Cetak_{clientName}</span> di Maeng Studio.
-          </p>
+      <div className="min-h-screen bg-[#0a0a0a] px-4 py-8 text-white md:px-8">
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-6 rounded-3xl border border-emerald-500/25 bg-emerald-500/[0.06] p-6 text-center">
+            <CheckCircle2 className="mx-auto mb-3 h-14 w-14 text-emerald-500" />
+            <h2 className="text-2xl font-light">Pilihan Foto Tersimpan</h2>
+            <p className="mt-2 text-sm text-white/60">
+              Terima kasih, {clientName}. Foto di bawah ini sudah dipilih untuk album Anda.
+            </p>
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+              <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-5 py-3">
+                <p className="text-2xl font-semibold text-emerald-300">{movedCount}</p>
+                <p className="text-[11px] text-emerald-100/60">foto terpilih</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3">
+                <p className="text-2xl font-semibold text-white">{movedCount} / {maxPhotos}</p>
+                <p className="text-[11px] text-white/50">kuota album terpakai</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 md:p-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-medium">Foto yang Anda pilih</h3>
+                <p className="mt-1 text-xs text-white/50">
+                  Tersimpan di folder <span className="text-emerald-300">Foto Cetak_{clientName}</span>.
+                </p>
+              </div>
+              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs text-emerald-300">
+                {movedCount} foto tersimpan
+              </span>
+            </div>
+
+            {displayMovedPhotos.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                {displayMovedPhotos.map((photo, index) => (
+                  <div key={photo.id} className="group relative aspect-[3/4] overflow-hidden rounded-2xl border border-emerald-500/20 bg-black/30">
+                    <img src={photo.thumbnail} alt={photo.name} className="h-full w-full object-cover" loading="lazy" />
+                    <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-2 pt-8">
+                      <p className="truncate text-[10px] text-white/70">#{index + 1} · {photo.name}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setZoomedPhoto(photo)}
+                      className="absolute right-2 top-2 rounded-lg bg-black/60 p-2 text-white opacity-100 backdrop-blur-sm transition-colors hover:bg-black/80"
+                      aria-label={`Lihat ${photo.name}`}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="py-12 text-center text-sm text-white/50">Foto terpilih belum dapat ditampilkan.</p>
+            )}
+          </div>
+
           <button
             type="button"
             onClick={() => setIsSuccess(false)}
-            className="mt-4 w-full rounded-2xl bg-emerald-500/10 border border-emerald-500/30 px-5 py-3 text-sm font-medium text-emerald-100 hover:bg-emerald-500/15 transition-colors"
+            className="mt-6 w-full rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/15"
           >
-            Tambah Foto di Album Anda
+            Tambah atau Ganti Foto
           </button>
         </div>
+
+        {zoomedPhoto && (
+          <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/95 p-4 backdrop-blur-lg">
+            <button
+              type="button"
+              onClick={() => setZoomedPhoto(null)}
+              className="absolute right-6 top-6 rounded-full bg-white/10 p-2 text-white/70 transition-colors hover:text-white"
+              aria-label="Tutup preview"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <div className="flex w-full max-w-4xl items-center justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => navigatePreview(-1)}
+                className="rounded-full bg-white/10 px-4 py-3 text-white transition-colors hover:bg-white/20"
+                aria-label="Foto sebelumnya"
+              >
+                &#8592;
+              </button>
+              <img src={zoomedPhoto.url} alt={zoomedPhoto.name} className="max-h-[75vh] max-w-[80%] rounded-lg object-contain shadow-2xl" />
+              <button
+                type="button"
+                onClick={() => navigatePreview(1)}
+                className="rounded-full bg-white/10 px-4 py-3 text-white transition-colors hover:bg-white/20"
+                aria-label="Foto berikutnya"
+              >
+                &#8594;
+              </button>
+            </div>
+            <p className="mt-4 max-w-lg truncate px-4 text-sm text-white/80">{zoomedPhoto.name}</p>
+            <button
+              type="button"
+              onClick={() => void handleDownload(zoomedPhoto)}
+              disabled={downloadingId === zoomedPhoto.id}
+              className="mt-5 flex items-center gap-2 rounded-xl bg-white/10 px-5 py-3 text-sm font-medium text-white transition-colors hover:bg-white/20 disabled:opacity-50"
+            >
+              {downloadingId === zoomedPhoto.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Unduh Foto
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -363,6 +581,24 @@ export default function ClientGalleryPortal({
                 ? `${selectedIds.length} dipilih`
                 : "Pilih foto yang Anda inginkan"}
           </p>
+          {pendingSaveStatus !== "idle" && (
+            <p
+              className={`mt-1 text-[10px] ${
+                pendingSaveStatus === "error"
+                  ? "text-rose-300"
+                  : pendingSaveStatus === "saving"
+                    ? "text-amber-300"
+                    : "text-emerald-300"
+              }`}
+              aria-live="polite"
+            >
+              {pendingSaveStatus === "saving"
+                ? "Menyimpan pilihan..."
+                : pendingSaveStatus === "error"
+                  ? "Gagal menyimpan pilihan"
+                  : "Pilihan tersimpan"}
+            </p>
+          )}
         </div>
       </div>
 
@@ -446,14 +682,61 @@ export default function ClientGalleryPortal({
       )}
 
       <div className="p-4 md:p-8">
+        {!isLoadingPhotos && photos.length > 0 && !galleryError && (
+          <div className="mb-5 flex flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3 md:flex-row md:items-center">
+            <input
+              type="search"
+              value={photoSearch}
+              onChange={(event) => setPhotoSearch(event.target.value)}
+              placeholder="Cari nama foto..."
+              aria-label="Cari nama foto"
+              className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white outline-none placeholder:text-white/35 focus:border-amber-500/60"
+            />
+            <div className="flex gap-2 overflow-x-auto">
+              {([
+                ["all", "Semua"],
+                ["selected", "Terpilih"],
+                ["available", "Belum dipilih"],
+              ] as const).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setPhotoFilter(value)}
+                  className={`shrink-0 rounded-xl px-3 py-2 text-xs transition-colors ${
+                    photoFilter === value
+                      ? "bg-amber-500 text-black"
+                      : "bg-white/5 text-white/60 hover:bg-white/10 hover:text-white"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {isLoadingPhotos ? (
           <div className="flex flex-col items-center justify-center py-32 text-white/40">
             <Loader2 className="w-8 h-8 animate-spin mb-4 text-amber-500" />
             <p>Memuat galeri dari Google Drive...</p>
           </div>
+        ) : galleryError ? (
+          <div className="mx-auto max-w-md py-24 text-center text-white/60">
+            <p>{galleryError}</p>
+            <button
+              type="button"
+              onClick={() => setGalleryRetry((current) => current + 1)}
+              className="mt-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-5 py-3 text-sm text-amber-200 transition-colors hover:bg-amber-500/20"
+            >
+              Coba Muat Ulang Galeri
+            </button>
+          </div>
         ) : photos.length === 0 && movedCount === 0 ? (
           <div className="text-center py-32 text-white/40">
             Tidak ada foto ditemukan di folder tersebut.
+          </div>
+        ) : photos.length > 0 && visiblePhotos.length === 0 ? (
+          <div className="text-center py-24 text-white/40">
+            Tidak ada foto yang sesuai dengan filter atau pencarian.
           </div>
         ) : photos.length === 0 && movedCount > 0 ? (
           <div className="text-center py-16 text-white/40">
@@ -464,7 +747,7 @@ export default function ClientGalleryPortal({
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3 md:gap-4">
-            {photos.map((photo) => {
+            {visiblePhotos.map((photo) => {
               const isSelected = selectedIds.includes(photo.id);
               const isMoved = movedFileIds.includes(photo.id);
               const isDownloading = downloadingId === photo.id;
@@ -725,11 +1008,29 @@ export default function ClientGalleryPortal({
             <X className="w-6 h-6" />
           </button>
 
-          <img
-            src={zoomedPhoto.url}
-            alt={zoomedPhoto.name}
-            className="max-w-full max-h-[70vh] object-contain rounded-lg shadow-2xl"
-          />
+          <div className="flex w-full max-w-4xl items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigatePreview(-1)}
+              className="rounded-full bg-white/10 px-4 py-3 text-white transition-colors hover:bg-white/20"
+              aria-label="Foto sebelumnya"
+            >
+              &#8592;
+            </button>
+            <img
+              src={zoomedPhoto.url}
+              alt={zoomedPhoto.name}
+              className="max-h-[70vh] max-w-[80%] rounded-lg object-contain shadow-2xl"
+            />
+            <button
+              type="button"
+              onClick={() => navigatePreview(1)}
+              className="rounded-full bg-white/10 px-4 py-3 text-white transition-colors hover:bg-white/20"
+              aria-label="Foto berikutnya"
+            >
+              &#8594;
+            </button>
+          </div>
           <p className="text-white/80 mt-4 font-mono text-sm max-w-lg truncate px-4">
             {zoomedPhoto.name}
           </p>
@@ -774,6 +1075,17 @@ export default function ClientGalleryPortal({
           </div>
         </div>
       )}
+
+      <AlertModal
+        isOpen={showIncompleteModal}
+        title="Simpan pilihan foto?"
+        message={`${selectedIds.length} foto akan dipindahkan ke album. Foto masih dapat dikembalikan dari portal setelah proses selesai.`}
+        variant="info"
+        confirmLabel="Ya, simpan"
+        cancelLabel="Batal"
+        onClose={confirmSubmit}
+        onCancel={() => setShowIncompleteModal(false)}
+      />
 
       <AlertModal
         isOpen={!!pendingSelectionId && maxPhotos > DENSE_ALBUM_THRESHOLD}
