@@ -525,13 +525,13 @@ export default function AdminDashboardPage() {
                               </td>
                               
                               {/* --- TAMBAHAN: FORM INPUT DAN TOMBOL KIRIM UNTUK ADMIN --- */}
-                              <td className="px-4 py-3 border-l border-white/5">
-                                <div className="flex flex-col gap-2 max-w-[250px] mx-auto">
-                                          <div className="grid grid-cols-2 gap-2">
+                              <td className="min-w-[300px] px-4 py-3 border-l border-white/5 align-top md:min-w-0">
+                                <div className="mx-auto flex w-full min-w-[268px] max-w-[340px] flex-col gap-2 md:min-w-0">
+                                  <div className="grid grid-cols-1 gap-2 min-[420px]:grid-cols-2">
                                     <select 
                                       value={inputData.albumType}
                                       onChange={(e) => handleInputChange(b.id, "albumType", e.target.value)}
-                                      className="bg-black/50 border border-white/10 rounded-lg py-1.5 px-3 text-[11px] text-white focus:border-amber-500 outline-none"
+                                      className="min-h-10 w-full bg-black/50 border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:border-amber-500 outline-none"
                                     >
                                       <option value="10_sheet">Kolase 10 Sheet</option>
                                       <option value="15_sheet">Kolase 15 Sheet</option>
@@ -542,25 +542,26 @@ export default function AdminDashboardPage() {
                                       max={DEFAULT_MAX_PHOTOS}
                                       value={inputData.maxPhotos}
                                       onChange={(e) => handleInputChange(b.id, "maxPhotos", e.target.value)}
-                                      className="bg-black/50 border border-white/10 rounded-lg py-1.5 px-3 text-[11px] text-white focus:border-amber-500 outline-none"
+                                      className="min-h-10 w-full bg-black/50 border border-white/10 rounded-lg py-1.5 px-3 text-xs text-white focus:border-amber-500 outline-none"
                                       title="Jumlah maksimal foto yang dapat dipilih oleh konsumen"
                                       placeholder="Jumlah foto"
                                     />
                                   </div>
-                                  <div className="flex gap-2">
+                                  <div className="flex flex-col gap-2 min-[420px]:flex-row">
                                     <input
                                       type="url"
                                       placeholder="Paste Link G-Drive..."
                                       value={inputData.link}
                                       onChange={(e) => handleInputChange(b.id, "link", e.target.value)}
-                                      className="w-full bg-black/50 border border-white/10 rounded-lg py-1.5 px-3 text-[11px] text-white focus:border-blue-500 outline-none"
+                                      className="min-h-10 min-w-0 w-full flex-1 bg-black/50 border border-white/10 rounded-lg py-2 px-3 text-sm text-white focus:border-blue-500 outline-none"
                                     />
                                     <button
                                       onClick={() => handleKirimLink(b.id, b.client_name)}
-                                      className="bg-blue-600 hover:bg-blue-500 text-white p-1.5 px-3 rounded-lg flex items-center justify-center transition-colors"
+                                      className="min-h-10 w-full shrink-0 bg-blue-600 hover:bg-blue-500 text-white px-4 rounded-lg flex items-center justify-center gap-2 text-xs font-medium transition-colors min-[420px]:w-auto"
                                       title="Generate & Kirim Link WA"
                                     >
                                       <Send className="w-3.5 h-3.5" />
+                                      <span className="min-[420px]:hidden">Kirim Link WhatsApp</span>
                                     </button>
                                   </div>
                                   <p className="text-[10px] text-white/40">
