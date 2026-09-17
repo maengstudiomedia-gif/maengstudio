@@ -1,5 +1,4 @@
--- Keep profile roles aligned with the role values used by the application.
--- Existing installations may use a different name for the old role check.
+-- Replace any legacy role check so sales and customer can be assigned.
 do $$
 declare
   constraint_name text;
