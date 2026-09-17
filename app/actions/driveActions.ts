@@ -11,7 +11,7 @@ import {
   getOrCreateClientPrintFolder,
   hasServiceAccountDriveConfig,
 } from "@/lib/google-drive";
-import { supabaseAdmin, mergeBookingNotesPatch } from "@/app/actions/adminBookings/utils";
+import { supabaseAdmin, mergeBookingNotesPatch, requireAdmin } from "@/app/actions/adminBookings/utils";
 
 type DrivePhoto = {
   id: string;
@@ -368,6 +368,12 @@ export async function checkGoogleDriveConfigAction(): Promise<{
   ready: boolean;
   message: string;
 }> {
+  try {
+    await requireAdmin();
+  } catch {
+    return { ready: false, message: "Akses admin diperlukan." };
+  }
+
   if (!hasServiceAccountDriveConfig()) {
     return {
       ready: false,
@@ -441,17 +447,24 @@ export async function getPhotosFromDriveAction(
 // ---------------------------------------------------------------------------
 export async function submitClientSelectionAction(
   bookingId: string,
+  portalToken: string,
   clientName: string,
   selectedFileIds: string[],
-  originalFolderLink: string,
   maxPhotos: number
 ): Promise<{ success: boolean; message?: string }> {
   try {
-    if (selectedFileIds.length !== maxPhotos) {
-      const sisa = maxPhotos - selectedFileIds.length;
+    const sortirNotes = await requirePortalNotes(bookingId, portalToken);
+    const sourceFolderId = sortirNotes.sourceFolderId;
+    const allowedMaxPhotos = normalizeMaxPhotos(sortirNotes.maxPhotos ?? maxPhotos);
+    if (!sourceFolderId) throw new Error("Folder sumber portal belum dikonfigurasi.");
+    if (!Array.isArray(selectedFileIds) || selectedFileIds.some((id) => typeof id !== "string") || selectedFileIds.length > HARD_ALBUM_LIMIT) {
+      return { success: false, message: "Daftar foto tidak valid." };
+    }
+    if (selectedFileIds.length !== allowedMaxPhotos) {
+      const sisa = allowedMaxPhotos - selectedFileIds.length;
       return {
         success: false,
-        message: `Anda harus memilih tepat ${maxPhotos} foto. Masih kurang ${sisa} foto.`,
+        message: `Anda harus memilih tepat ${allowedMaxPhotos} foto. Masih kurang ${sisa} foto.`,
       };
     }
 
@@ -464,16 +477,16 @@ export async function submitClientSelectionAction(
       };
     }
 
-    const sourceFolderId = extractFolderId(originalFolderLink);
-    const clientFolderId = await resolveClientPrintFolderId(targetFolderId, clientName, bookingId);
+    const safeClientName = sortirNotes.clientName || clientName || "Klien";
+    const clientFolderId = await resolveClientPrintFolderId(targetFolderId, safeClientName, bookingId);
 
     for (const fileId of selectedFileIds) {
-      await moveSelectedFileToFolder(fileId, sourceFolderId, clientFolderId, bookingId, clientName);
+      await moveSelectedFileToFolder(fileId, sourceFolderId, clientFolderId, bookingId, safeClientName);
     }
 
     await persistSelectionToBooking(
       bookingId,
-      clientName,
+      safeClientName,
       selectedFileIds,
       targetFolderId,
       clientFolderId,

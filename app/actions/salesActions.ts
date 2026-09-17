@@ -45,3 +45,24 @@ export async function getSalesDashboardAction() {
     return { success: false, error: error instanceof Error ? error.message : "Gagal memuat dashboard sales." };
   }
 }
+
+export async function getSalesBookingsAction(monthOffset = 0) {
+  try {
+    const { user } = await getSalesUser();
+    const safeOffset = Number.isInteger(monthOffset) ? Math.min(0, Math.max(-24, monthOffset)) : 0;
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth() + safeOffset, 1).toISOString();
+    const end = new Date(now.getFullYear(), now.getMonth() + safeOffset + 1, 1).toISOString();
+    const { data, error } = await supabaseAdmin
+      .from("bookings")
+      .select("id, invoice_number, client_name, client_phone, event_type, status, created_at, package_snapshot, service_type")
+      .eq("user_id", user.id)
+      .gte("created_at", start)
+      .lt("created_at", end)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return { success: true, data: data || [] };
+  } catch (error: unknown) {
+    return { success: false, error: error instanceof Error ? error.message : "Gagal memuat pesanan sales.", data: [] };
+  }
+}

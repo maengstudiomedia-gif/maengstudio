@@ -3,12 +3,30 @@
 import { revalidatePath } from "next/cache";
 import { 
   supabaseAdmin, getErrorMessage, parseEventDetails, parseProcessMeta, 
-  mergeProcessMetaAsNotes, mergeBookingNotesPatch, STORAGE_BUCKET, BookingProcessMeta 
+  mergeProcessMetaAsNotes, mergeBookingNotesPatch, STORAGE_BUCKET, BookingProcessMeta, requireAdminOrSales
 } from "./utils";
+
+function normalizePhone(value: unknown): string {
+  const digits = String(value || "").replace(/\D/g, "");
+  return digits.startsWith("62") ? `0${digits.slice(2)}` : digits;
+}
 
 // --- FUNGSI BARU: MEMBUAT PESANAN ADMIN ---
 export async function createAdminBookingAction(payload: any) {
   try {
+    const { user, role } = await requireAdminOrSales();
+    const ownerId = role === "sales" ? user.id : payload.userId;
+    const clientPhone = normalizePhone(payload.client_phone);
+    if (!payload.client_name || !clientPhone) return { success: false, error: "Nama dan nomor HP wajib diisi." };
+
+    const [{ data: leads, error: leadsError }, { data: bookings, error: bookingsError }] = await Promise.all([
+      supabaseAdmin.from("leads").select("id, client_name, client_phone, status, created_at").not("client_phone", "is", null),
+      supabaseAdmin.from("bookings").select("id, client_name, client_phone, status, created_at, invoice_number").not("client_phone", "is", null),
+    ]);
+    if (leadsError) throw leadsError;
+    if (bookingsError) throw bookingsError;
+    const duplicate = [...(leads || []), ...(bookings || [])].find((record) => normalizePhone(record.client_phone) === clientPhone);
+    if (duplicate) return { success: false, error: "Nomor HP sudah digunakan.", duplicate };
     // 1. Ambil detail Paket Utama untuk Snapshot (Nama, Harga, Tipe)
     const { data: mainPkg, error: mainPkgError } = await supabaseAdmin
       .from("packages")
@@ -35,7 +53,7 @@ export async function createAdminBookingAction(payload: any) {
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from("bookings")
       .insert({
-        user_id: payload.userId,
+        user_id: ownerId,
         invoice_number: payload.invoice_number,
         service_type: payload.service_type,
         
@@ -45,7 +63,7 @@ export async function createAdminBookingAction(payload: any) {
         // ---------------------
 
         client_name: payload.client_name,
-        client_phone: payload.client_phone,
+        client_phone: clientPhone,
         event_type: payload.event_type,
         custom_event_type: payload.custom_event_type,
         booker_type: payload.booker_type,
@@ -64,7 +82,7 @@ export async function createAdminBookingAction(payload: any) {
       .from("invoices")
       .insert({
         booking_id: booking.id,
-        user_id: payload.userId,
+        user_id: ownerId,
         total_amount: payload.total_price, // Diambil dari total kalkulasi di form admin
         dp_amount: 0,
         paid_amount: 0,
@@ -84,6 +102,7 @@ export async function createAdminBookingAction(payload: any) {
 // --- FUNGSI UPDATE PEMBAYARAN ---
 export async function updateBookingPaymentAction(bookingId: string, paymentType: "dp" | "lunas", amount?: number) {
   try {
+    await requireAdmin();
     if (!bookingId) return { success: false, error: "ID pesanan tidak ditemukan." };
 
     const { data: booking, error: bookingError } = await supabaseAdmin
@@ -178,6 +197,7 @@ export async function updateBookingProcessAction(
   bookingId: string, actionType: "start_edit" | "start_print" | "finish" | "picked_up", pickupProofUrl?: string
 ) {
   try {
+    await requireAdmin();
     const [{ data: booking, error: bErr }, { data: invoice, error: iErr }] = await Promise.all([
       supabaseAdmin.from("bookings").select("id,status,notes").eq("id", bookingId).single(),
       supabaseAdmin.from("invoices").select("payment_status").eq("booking_id", bookingId).single(),
@@ -221,11 +241,16 @@ export async function updateBookingProcessAction(
 // --- FUNGSI UPLOAD BUKTI PENGAMBILAN ---
 export async function uploadPickupProofAction(formData: FormData) {
   try {
+    await requireAdmin();
     const bookingId = String(formData.get("bookingId") || "");
     const file = formData.get("file") as File | null;
     if (!bookingId || !file || file.size === 0) return { success: false, error: "File bukti wajib dipilih." };
 
-    const ext = file.name.split(".").pop() || "jpg";
+    const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+    if (!allowedTypes.has(file.type)) return { success: false, error: "Format bukti harus JPG, PNG, atau WebP." };
+    if (file.size > 10 * 1024 * 1024) return { success: false, error: "Ukuran bukti maksimal 10 MB." };
+
+    const ext = file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
     const path = `pickups/${bookingId}-${Date.now()}.${ext}`;
     const { error: uploadError } = await supabaseAdmin.storage.from(STORAGE_BUCKET).upload(path, file);
     if (uploadError) throw new Error(uploadError.message);

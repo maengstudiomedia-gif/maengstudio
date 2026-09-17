@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
+import { createServerClient } from "@supabase/ssr";
+import { cookies } from "next/headers";
 
 export const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -7,6 +9,46 @@ export const supabaseAdmin = createClient(
 
 export const ROMAN_MONTHS = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"];
 export const STORAGE_BUCKET = "images";
+
+export async function requireAdmin() {
+  const cookieStore = await cookies();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
+  );
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (!user || authError) throw new Error("Sesi tidak valid.");
+
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profileError || profile?.role !== "admin") throw new Error("Akses admin diperlukan.");
+  return user;
+}
+
+export async function requireAdminOrSales() {
+  const cookieStore = await cookies();
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll: () => cookieStore.getAll(), setAll: () => {} } }
+  );
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (!user || authError) throw new Error("Sesi tidak valid.");
+
+  const { data: profile, error: profileError } = await supabaseAdmin
+    .from("profiles")
+    .select("role")
+    .eq("id", user.id)
+    .maybeSingle();
+  if (profileError || !profile || !["admin", "sales"].includes(profile.role)) {
+    throw new Error("Akses admin atau sales diperlukan.");
+  }
+  return { user, role: profile.role as "admin" | "sales" };
+}
 
 export type EventDetail = {
   date?: string;

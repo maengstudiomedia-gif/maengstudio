@@ -67,32 +67,8 @@ export async function proxy(request: NextRequest) {
     error,
   } = await supabase.auth.getUser();
 
-  let authUser = user;
-  let authError = error;
-
-  // Fallback untuk edge/runtime tertentu: jika verifikasi user gagal
-  // tetapi cookie sesi Supabase ada, coba baca sesi dari cookie.
-  if (!authUser || authError) {
-    const hasSupabaseSessionCookie = request.cookies.getAll().some((c) => {
-      const n = c.name;
-      return (
-        n.startsWith("sb-") &&
-        (n.includes("auth-token") || n.includes("refresh-token"))
-      );
-    });
-
-    if (hasSupabaseSessionCookie) {
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      if (session?.user) {
-        authUser = session.user;
-        authError = sessionError ?? null;
-      }
-    }
-  }
+  const authUser = user;
+  const authError = error;
 
   const isProtectedUI =
     request.nextUrl.pathname.startsWith("/(Dashboard)") ||
@@ -138,15 +114,12 @@ export async function proxy(request: NextRequest) {
     // Jangan gunakan last_sign_in_at sebagai timeout request-by-request;
     // nilai ini tidak berubah di setiap request dan bisa memicu logout palsu.
     // Validitas sesi tetap dijaga oleh Supabase JWT + refresh token.
-    let role = authUser.user_metadata?.role as string | undefined;
-    if (!role) {
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", authUser.id)
-        .single();
-      role = profileData?.role || "client";
-    }
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", authUser.id)
+      .maybeSingle();
+    const role = profileData?.role || "customer";
 
     const path = request.nextUrl.pathname;
 

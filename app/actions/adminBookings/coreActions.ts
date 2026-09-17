@@ -6,10 +6,11 @@ import { extractDateKeysFromEventDetails } from "@/lib/bookingCalendar/extractDa
 import { validateBookingEventDatesAction, revalidateBookingCalendarPaths } from "@/app/actions/bookingCalendarActions";
 import { 
   supabaseAdmin, getErrorMessage, parseProcessMeta, parseEventDetails,
-  UpdateBookingPayload 
+  UpdateBookingPayload, requireAdmin, requireAdminOrSales
 } from "./utils";
 
 export async function generateInvoiceNumberAction() {
+  await requireAdminOrSales();
   const date = new Date();
   const dd = String(date.getDate()).padStart(2, '0');         // 2 digit tanggal
   const mm = String(date.getMonth() + 1).padStart(2, '0');    // 2 digit bulan
@@ -45,6 +46,7 @@ export async function generateInvoiceNumberAction() {
 
 export async function getAdminBookingsAction() {
   try {
+    await requireAdmin();
     const [{ data: bookings, error: bookingError }, { data: invoices, error: invoiceError }, { data: packages }, { data: profiles }] = await Promise.all([
       supabaseAdmin.from("bookings").select("*").order("created_at", { ascending: false }),
       supabaseAdmin.from("invoices").select("*").order("created_at", { ascending: false }),
@@ -141,6 +143,7 @@ export async function getAdminBookingsAction() {
 
 export async function updateAdminBookingAction(payload: UpdateBookingPayload) {
   try {
+    await requireAdmin();
     const { id, ...updates } = payload;
     if (!id) return { success: false, error: "ID pesanan tidak ditemukan." };
 
@@ -173,6 +176,7 @@ export async function updateAdminBookingAction(payload: UpdateBookingPayload) {
 
 export async function deleteAdminBookingAction(bookingId: string) {
   try {
+    await requireAdmin();
     if (!bookingId) return { success: false, error: "ID pesanan tidak ditemukan." };
 
     const { error: invoiceError } = await supabaseAdmin.from("invoices").delete().eq("booking_id", bookingId);
@@ -191,6 +195,7 @@ export async function deleteAdminBookingAction(bookingId: string) {
 
 export async function findInvoiceByNumberAction(invoiceNumber: string) {
   try {
+    await requireAdmin();
     if (!invoiceNumber) return { success: false, error: "Nomor nota wajib diisi." };
 
     const { data: booking, error: bookingError } = await supabaseAdmin

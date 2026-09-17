@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { supabaseAdmin, getErrorMessage } from "@/app/actions/adminBookings/utils";
+import { supabaseAdmin, getErrorMessage, requireAdmin } from "@/app/actions/adminBookings/utils";
 import { buildBookingIdsByDate } from "@/lib/bookingCalendar/buildBookingIdsByDate";
 import { buildPublicDaySummaries } from "@/lib/bookingCalendar/buildPublicDaySummaries";
 import { buildAdminCalendarDayEntries } from "@/lib/bookingCalendar/buildAdminCalendarDayEntries";
@@ -29,6 +29,7 @@ export async function getPublicBookingCalendarAction() {
 /** Kalender admin: tanggal + nama klien (maks tampilan mengikuti kapasitas). */
 export async function getAdminBookingCalendarAction() {
   try {
+    await requireAdmin();
     const rows = await fetchBookingsForCalendar();
     const days = buildAdminCalendarDayEntries(rows);
     return { success: true as const, days };

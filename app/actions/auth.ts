@@ -91,7 +91,10 @@ export async function secureLoginAction(formData: FormData) {
   // --- 1. EXPLICIT CSRF PROTECTION ---
   const origin = headersList.get("origin");
   const expectedOrigin = process.env.NEXT_PUBLIC_APP_URL;
-  if (origin && expectedOrigin && !origin.includes(expectedOrigin) && process.env.NODE_ENV === "production") {
+  const isExpectedOrigin = origin && expectedOrigin
+    ? origin.replace(/\/$/, "") === expectedOrigin.replace(/\/$/, "")
+    : true;
+  if (origin && expectedOrigin && !isExpectedOrigin && process.env.NODE_ENV === "production") {
     await equalizeTiming(startTime);
     return { success: false, message: "Permintaan ditolak: Keamanan CSRF." };
   }

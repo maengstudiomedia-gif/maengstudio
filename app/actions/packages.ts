@@ -2,6 +2,7 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { revalidatePath } from "next/cache";
+import { requireAdmin } from "@/app/actions/adminBookings/utils";
 
 // Gunakan Admin Key agar bebas hambatan saat melakukan operasi CRUD
 const supabaseAdmin = createClient(
@@ -57,6 +58,7 @@ export async function getPackagesAction() {
 // FUNGSI UNTUK ADMIN: Menambah paket baru
 export async function createPackageAction(formData: FormData) {
   try {
+    await requireAdmin();
     // 1. Ekstrak data teks dari FormData
     const type = formData.get("type") as string;
     const name = formData.get("name") as string;
@@ -105,6 +107,7 @@ export async function createPackageAction(formData: FormData) {
 // FUNGSI UNTUK ADMIN: Mengupdate paket (Edit)
 export async function updatePackageAction(formData: FormData) {
   try {
+    await requireAdmin();
     // 1. Dapatkan ID Paket yang mau diedit
     const id = formData.get("id") as string;
     if (!id) return { success: false, error: "ID paket tidak ditemukan" };
@@ -162,6 +165,7 @@ export async function updatePackageAction(formData: FormData) {
 
 export async function deletePackageAction(id: string, imageUrl?: string) {
   try {
+    await requireAdmin();
     // 1. Jika ada gambar, hapus dari Storage dulu
     if (imageUrl) {
       const path = imageUrl.split(`${STORAGE_BUCKET}/`)[1]; // Ambil path relatifnya
