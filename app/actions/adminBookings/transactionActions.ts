@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { 
   supabaseAdmin, getErrorMessage, parseEventDetails, parseProcessMeta, 
-  mergeProcessMetaAsNotes, mergeBookingNotesPatch, STORAGE_BUCKET, BookingProcessMeta, requireAdminOrSales
+  mergeProcessMetaAsNotes, mergeBookingNotesPatch, STORAGE_BUCKET, BookingProcessMeta, requireAdmin, requireAdminOrSales
 } from "./utils";
 
 function normalizePhone(value: unknown): string {
