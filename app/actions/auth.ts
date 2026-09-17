@@ -237,8 +237,8 @@ export async function secureLoginAction(formData: FormData) {
       console.log("Data profil berhasil diambil:", profileData);
     }
 
-    const finalRole = profileData?.role || 'client';
-    const redirectTo = finalRole === "admin" ? "/admin/dashboard" : "/client/profile";
+    const finalRole = profileData?.role || 'customer';
+    const redirectTo = finalRole === "admin" ? "/admin/dashboard" : finalRole === "sales" ? "/sales" : "/client/profile";
 
     // --- SINKRONISASI KE METADATA (TERMASUK ROLE) ---
     // Prioritaskan update lewat sesi user aktif agar token/cookie ikut sinkron.

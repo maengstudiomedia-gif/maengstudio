@@ -36,6 +36,8 @@ export type BookingRow = {
   invoice?: InvoiceRow | null;
   custom_event_type?: string;
   package_snapshot?: Record<string, unknown> | null;
+  creator_name?: string;
+  creator_role?: string;
   /** Diisi dari notes.addon_package_ids + join ke katalog */
   addon_package_ids?: string[];
   addon_packages?: Array<{ id: string; name: string; type: string; price: number }>;

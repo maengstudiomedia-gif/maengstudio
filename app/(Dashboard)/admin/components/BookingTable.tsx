@@ -39,6 +39,7 @@ export default function BookingTable({
         <tr>
           <th className="px-4 py-3">Nota</th>
           <th className="px-4 py-3">Klien</th>
+          <th className="px-4 py-3">Input oleh</th>
           <th className="px-4 py-3 min-w-[250px]">Rincian Paket & Harga</th>
           <th className="px-4 py-3">Acara</th>
           <th className="px-4 py-3">Tanggal Acara</th>
@@ -79,6 +80,10 @@ export default function BookingTable({
               <td className="px-4 py-3">
                 <p className="font-medium text-white">{row.client_name || "-"}</p>
                 <p className="text-xs text-white/50">{row.client_phone || "-"}</p>
+              </td>
+              <td className="px-4 py-3">
+                <p className="text-white/80">{row.creator_name || "Admin / lama"}</p>
+                <p className="text-[10px] uppercase tracking-wider text-cyan-300/70">{row.creator_role || "customer"}</p>
               </td>
               
               {/* KOLOM RINCIAN PAKET (DIPERBARUI) */}

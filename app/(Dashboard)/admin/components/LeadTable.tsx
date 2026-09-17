@@ -57,6 +57,7 @@ export default function LeadTable({ leads, onEdit, onDelete, onStatusChange }: L
                   <p className="text-[10px] text-white/40 mt-1">
                     Dibuat: {new Date(lead.created_at).toLocaleDateString("id-ID")}
                   </p>
+                  <p className="text-[10px] text-cyan-300/80 mt-1">Sales: {lead.creator_name || "Admin / lama"}</p>
                 </td>
 
                 {/* Kolom 2: Info Acara */}

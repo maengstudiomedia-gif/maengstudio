@@ -3,6 +3,9 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseAdmin = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
 export async function verifyAndOverrideDeviceAction(email: string, password: string) {
   // PERBAIKAN: Tambahkan 'await' di sini karena Next.js terbaru mewajibkannya
@@ -48,6 +51,7 @@ export async function verifyAndOverrideDeviceAction(email: string, password: str
     maxAge: 60 * 60 * 24 * 365 // Aktif 1 Tahun
   });
 
-  const role = data.user.user_metadata?.role || "client";
+  const { data: profile } = await supabaseAdmin.from("profiles").select("role").eq("id", data.user.id).maybeSingle();
+  const role = profile?.role || data.user.user_metadata?.role || "customer";
   return { success: true, role };
 }

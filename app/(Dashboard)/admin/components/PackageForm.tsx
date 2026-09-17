@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom"; // IMPORT BARU
-import { Save, Loader2, X, Upload } from "lucide-react";
+import { Save, Loader2, X, Upload, Images, FileImage, FolderOpen } from "lucide-react";
 import { createPackageAction, updatePackageAction } from "@/app/actions/packages";
 import { PACKAGE_CATEGORIES, getPackageCategoryValue, type PackageCategory } from "@/lib/package-categories";
 
@@ -20,6 +20,8 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const albumInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const editingId = initialData?.id || null;
   const [type, setType] = useState<PackageCategory>(getPackageCategoryValue(initialData?.type) || "audio");
@@ -37,6 +39,26 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(initialData?.image_url || null);
+
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>, source: "album" | "file" | "folder") => {
+    const selectedFiles = Array.from(event.target.files || []);
+    const file = source === "folder"
+      ? selectedFiles.find((item) => item.type.startsWith("image/"))
+      : selectedFiles[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      setMessage({ type: "error", text: "File yang dipilih harus berupa gambar." });
+      event.target.value = "";
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+    setMessage({
+      type: "success",
+      text: source === "folder" ? `Folder dipilih. Menggunakan gambar pertama: ${file.name}` : `Gambar dipilih: ${file.name}`,
+    });
+    event.target.value = "";
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -105,20 +127,48 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
                     {imagePreview ? (
                       <div className="relative h-40 rounded-lg overflow-hidden">
                         <img src={imagePreview} className="w-full h-full object-cover" />
+                        <div className="absolute inset-x-3 bottom-3 flex gap-2">
+                          <button type="button" onClick={() => albumInputRef.current?.click()} className="flex-1 rounded-lg bg-black/70 px-2 py-2 text-[10px] font-bold text-white backdrop-blur-sm transition hover:bg-amber-500 hover:text-black">Album Foto</button>
+                          <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-1 rounded-lg bg-black/70 px-2 py-2 text-[10px] font-bold text-white backdrop-blur-sm transition hover:bg-amber-500 hover:text-black">File</button>
+                          <button type="button" onClick={() => folderInputRef.current?.click()} className="flex-1 rounded-lg bg-black/70 px-2 py-2 text-[10px] font-bold text-white backdrop-blur-sm transition hover:bg-amber-500 hover:text-black">Folder</button>
+                        </div>
                         <button type="button" onClick={() => {setImageFile(null); setImagePreview(null);}} className="absolute top-2 right-2 bg-red-500 p-1.5 rounded-full hover:bg-red-600 transition-colors shadow-lg">
                           <X className="w-4 h-4 text-white" />
                         </button>
                       </div>
                     ) : (
-                      <label className="cursor-pointer py-8 flex flex-col items-center hover:opacity-70 transition-opacity">
-                        <Upload className="w-8 h-8 text-white/20 mb-2" />
-                        <span className="text-xs text-white/40">Klik untuk upload gambar</span>
-                        <input type="file" className="hidden" ref={fileInputRef} accept="image/*" onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if(file) { setImageFile(file); setImagePreview(URL.createObjectURL(file)); }
-                        }} />
-                      </label>
+                      <div className="py-5">
+                        <Upload className="mx-auto mb-3 h-8 w-8 text-white/20" />
+                        <p className="mb-4 text-xs text-white/40">Pilih sumber gambar paket</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          <button type="button" onClick={() => albumInputRef.current?.click()} className="flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-2 py-3 text-[10px] text-white/60 transition hover:border-amber-500 hover:text-amber-400"><Images className="h-5 w-5" />Album Foto</button>
+                          <button type="button" onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-2 py-3 text-[10px] text-white/60 transition hover:border-amber-500 hover:text-amber-400"><FileImage className="h-5 w-5" />File HP</button>
+                          <button type="button" onClick={() => folderInputRef.current?.click()} className="flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-2 py-3 text-[10px] text-white/60 transition hover:border-amber-500 hover:text-amber-400"><FolderOpen className="h-5 w-5" />Folder</button>
+                        </div>
+                      </div>
                     )}
+                    <input
+                      type="file"
+                      className="hidden"
+                      ref={fileInputRef}
+                      accept=".jpg,.jpeg,.png,.webp"
+                      onChange={(event) => handleImageChange(event, "file")}
+                    />
+                    <input
+                      type="file"
+                      className="hidden"
+                      ref={albumInputRef}
+                      accept="image/*"
+                      onChange={(event) => handleImageChange(event, "album")}
+                    />
+                    <input
+                      type="file"
+                      className="hidden"
+                      ref={folderInputRef}
+                      accept="image/*,.jpg,.jpeg,.png,.webp"
+                      onChange={(event) => handleImageChange(event, "folder")}
+                      {...({ webkitdirectory: "", directory: "" } as any)}
+                    />
                   </div>
                 </div>
 

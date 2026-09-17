@@ -154,8 +154,12 @@ export async function proxy(request: NextRequest) {
       return NextResponse.redirect(new URL("/client/profile", request.url));
     }
 
-    if (path.startsWith("/client") && role === "admin") {
-      return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+    if (path.startsWith("/sales") && role !== "sales") {
+      return NextResponse.redirect(new URL(role === "admin" ? "/admin/dashboard" : "/client/profile", request.url));
+    }
+
+    if (path.startsWith("/client") && (role === "admin" || role === "sales")) {
+      return NextResponse.redirect(new URL(role === "sales" ? "/sales" : "/admin/dashboard", request.url));
     }
   }
 

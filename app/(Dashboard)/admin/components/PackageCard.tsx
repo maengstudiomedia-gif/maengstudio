@@ -1,8 +1,10 @@
 // file: app/(Dashboard)/admin/components/PackageCard.tsx
 
 // 1. Pastikan import Plus ada di sini
-import { CheckCircle2, Trash2, Edit, Package, Plus } from "lucide-react";
+import { useState } from "react";
+import { CheckCircle2, Trash2, Edit, Package, Plus, Sparkles } from "lucide-react";
 import { getPackageCategoryLabel } from "@/lib/package-categories";
+import PackagePosterModal from "./PackagePosterModal";
 
 interface PackageProps {
   pkg: any;
@@ -13,6 +15,7 @@ interface PackageProps {
 
 // 2. PASTIKAN onBooking ditambahkan di dalam kurung kurawal parameter ini:
 export default function PackageCard({ pkg, onEdit, onDelete, onBooking }: PackageProps) {
+  const [showPoster, setShowPoster] = useState(false);
   
   // Parsing JSON fitur & cetakan
   const featuresList = typeof pkg.features === 'string' ? JSON.parse(pkg.features) : (pkg.features || []);
@@ -94,6 +97,14 @@ export default function PackageCard({ pkg, onEdit, onDelete, onBooking }: Packag
         >
           <Edit className="w-4 h-4" />
         </button>
+        <button
+          onClick={() => setShowPoster(true)}
+          aria-label={`Buat poster ${pkg.name}`}
+          title="Buat poster sosial media"
+          className="p-2.5 flex items-center justify-center bg-amber-500/10 hover:bg-amber-500 hover:text-black rounded-xl text-amber-500 transition-all"
+        >
+          <Sparkles className="w-4 h-4" />
+        </button>
         <button 
           onClick={onDelete}
           className="p-2.5 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl transition-all"
@@ -101,6 +112,7 @@ export default function PackageCard({ pkg, onEdit, onDelete, onBooking }: Packag
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
+      {showPoster && <PackagePosterModal pkg={pkg} onClose={() => setShowPoster(false)} />}
     </div>
   );
 }

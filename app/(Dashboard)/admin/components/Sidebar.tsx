@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { createBrowserClient } from "@supabase/ssr";
-import { Activity, CalendarDays, PackageSearch, Users, LogOut } from "lucide-react";
+import { Activity, CalendarDays, PackageSearch, Users, LogOut, UserCog } from "lucide-react";
 
 const NAV_ITEMS = [
   { name: "Ringkasan", href: "/admin/dashboard", icon: <Activity className="w-5 h-5" /> },
   { name: "Manajemen Pesanan", href: "/admin/bookings", icon: <CalendarDays className="w-5 h-5" /> },
   { name: "Katalog Paket", href: "/admin/packages", icon: <PackageSearch className="w-5 h-5" /> },
   { name: "Data Calon Klien", href: "/admin/leads", icon: <Users className="w-5 h-5" /> },
+  { name: "Kelola User", href: "/admin/accounts", icon: <UserCog className="w-5 h-5" /> },
 ] as const;
 
 function isNavActive(pathname: string, href: string) {

@@ -45,10 +45,11 @@ export async function generateInvoiceNumberAction() {
 
 export async function getAdminBookingsAction() {
   try {
-    const [{ data: bookings, error: bookingError }, { data: invoices, error: invoiceError }, { data: packages }] = await Promise.all([
+    const [{ data: bookings, error: bookingError }, { data: invoices, error: invoiceError }, { data: packages }, { data: profiles }] = await Promise.all([
       supabaseAdmin.from("bookings").select("*").order("created_at", { ascending: false }),
       supabaseAdmin.from("invoices").select("*").order("created_at", { ascending: false }),
       supabaseAdmin.from("packages").select("id,name,type,price"),
+      supabaseAdmin.from("profiles").select("id,full_name,role"),
     ]);
 
     if (bookingError) throw new Error(bookingError.message);
@@ -57,9 +58,11 @@ export async function getAdminBookingsAction() {
     const invoiceRows = (invoices || []) as Array<Record<string, unknown>>;
     const packageRows = (packages || []) as Array<Record<string, unknown>>;
     const bookingRows = (bookings || []) as Array<Record<string, unknown>>;
+    const profileRows = (profiles || []) as Array<Record<string, unknown>>;
 
     const invoiceMap = new Map(invoiceRows.map((invoice) => [String(invoice.booking_id || ""), invoice]));
     const packageMap = new Map(packageRows.map((pkg) => [String(pkg.id || ""), pkg]));
+    const profileMap = new Map(profileRows.map((profile) => [String(profile.id || ""), profile]));
 
     const rows = bookingRows.map((booking) => {
       const invoice = invoiceMap.get(String(booking.id || "")) || null;
@@ -125,6 +128,8 @@ export async function getAdminBookingsAction() {
         addon_package_ids: addonPackageIds,
         addon_packages: addonLines,
         dp_paid_amount: dpPaidAmount,
+        creator_name: String(profileMap.get(String(booking.user_id || ""))?.full_name || "Admin / lama"),
+        creator_role: String(profileMap.get(String(booking.user_id || ""))?.role || "customer"),
       };
     });
 

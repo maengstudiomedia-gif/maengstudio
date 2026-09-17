@@ -123,7 +123,7 @@ function LoginContent() {
       setIsSuccess(true);
       setIsLoading(false);
       
-      const targetPath = res.role === "admin" ? "/admin/dashboard" : "/client/profile";
+      const targetPath = res.role === "admin" ? "/admin/dashboard" : res.role === "sales" ? "/sales" : "/client/profile";
       redirectTimeoutRef.current = setTimeout(() => { router.replace(targetPath); router.refresh(); }, 1200);
     } else {
       showAlert(res.error || "Gagal memverifikasi akun. Email atau password salah.", "error");
@@ -158,7 +158,7 @@ function LoginContent() {
       } else {
         setIsSuccess(true); 
         setIsLoading(false);
-        const targetPath = result.redirectTo || (result.role === "admin" ? "/admin/dashboard" : "/client/profile");
+        const targetPath = result.redirectTo || (result.role === "admin" ? "/admin/dashboard" : result.role === "sales" ? "/sales" : "/client/profile");
         redirectTimeoutRef.current = setTimeout(() => { router.replace(targetPath); router.refresh(); }, 1200);
         redirectFallbackRef.current = setTimeout(() => { window.location.href = targetPath; }, 3000);
       }
