@@ -51,7 +51,6 @@ export async function updateUserRoleAction(userId: string, role: ManagedRole) {
   try {
     const admin = await requireAdmin();
     if (!userId || !["admin", "sales", "customer"].includes(role)) return { success: false, error: "Data role tidak valid." };
-    if (admin.id === userId && role !== "admin") return { success: false, error: "Akun admin yang sedang aktif tidak dapat diturunkan perannya." };
     const { error: profileError } = await supabaseAdmin.from("profiles").update({ role }).eq("id", userId);
     if (profileError) throw profileError;
     const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(userId, { user_metadata: { role } });
