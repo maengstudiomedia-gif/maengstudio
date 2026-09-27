@@ -18,6 +18,13 @@ import {
   AlertCircle,
   FolderOpen
 } from "lucide-react";
+import {
+  ALBUM_TYPES,
+  DEFAULT_ALBUM_TYPE,
+  getAlbumLabel,
+  getAlbumMaxPhotos,
+  resolveAlbumType,
+} from "@/lib/album-types";
 import { getAdminBookingsAction } from "@/app/actions/adminBookings";
 import { getLeadsAction } from "@/app/actions/leadsActions"; // <-- Import sudah disesuaikan
 import { getPublicPackages } from "@/app/actions/publicActions";
@@ -70,7 +77,7 @@ export default function AdminDashboardPage() {
   // =====================================================================
   const [adminInputs, setAdminInputs] = useState<Record<string, { link: string; albumType: string; maxPhotos: number; sendCount: number }>>({});
   const [driveStatus, setDriveStatus] = useState<string>("Memeriksa Google Drive...");
-  const DEFAULT_MAX_PHOTOS = 135;
+  const defaultAlbum = resolveAlbumType(DEFAULT_ALBUM_TYPE);
 
   useEffect(() => {
     checkGoogleDriveConfigAction().then((result) => setDriveStatus(result.message));
@@ -78,17 +85,18 @@ export default function AdminDashboardPage() {
 
   const handleInputChange = (bookingId: string, field: string, value: string) => {
     setAdminInputs((prev) => {
-      const current = prev[bookingId] || { link: "", albumType: "10_sheet", maxPhotos: DEFAULT_MAX_PHOTOS, sendCount: 0 };
+      const current = prev[bookingId] || {
+        link: "",
+        albumType: defaultAlbum.value,
+        maxPhotos: defaultAlbum.maxPhotos,
+        sendCount: 0,
+      };
       const next = { ...current };
 
       if (field === "albumType") {
-        next.albumType = value;
-        next.maxPhotos = DEFAULT_MAX_PHOTOS;
-      } else if (field === "maxPhotos") {
-        const parsed = Number(value);
-        next.maxPhotos = Number.isNaN(parsed)
-          ? current.maxPhotos
-          : Math.min(DEFAULT_MAX_PHOTOS, Math.max(1, parsed));
+        const album = resolveAlbumType(value);
+        next.albumType = album.value;
+        next.maxPhotos = album.maxPhotos;
       } else {
         (next as any)[field] = value;
       }
@@ -103,8 +111,12 @@ export default function AdminDashboardPage() {
       return alert("Harap masukkan link Google Drive terlebih dahulu!");
     }
 
-    const normalizedMaxPhotos = Math.min(DEFAULT_MAX_PHOTOS, Math.max(1, Number(inputData.maxPhotos) || DEFAULT_MAX_PHOTOS));
-    const finalizedInput = { ...inputData, maxPhotos: normalizedMaxPhotos };
+    const album = resolveAlbumType(inputData.albumType);
+    const finalizedInput = {
+      ...inputData,
+      albumType: album.value,
+      maxPhotos: album.maxPhotos,
+    };
 
     if (finalizedInput.sendCount >= 2) {
       return alert("Link hanya bisa dikirim sebanyak 2 kali. Jika perlu, buat pengaturan ulang link baru.");
@@ -124,7 +136,7 @@ export default function AdminDashboardPage() {
 
     const clientPortalUrl = configResult.shortPortalUrl;
 
-    const textWa = `Halo kak ${clientName},\n\nBerikut link folder untuk melihat galeri foto mentah: ${finalizedInput.link}\n\nKakak mendapat paket Cetak ${finalizedInput.albumType === "10_sheet" ? "10 Sheet" : "15 Sheet"} (Maksimal ${finalizedInput.maxPhotos} foto).\n\nSilakan pilih foto langsung melalui galeri interaktif kami di link berikut:\n${clientPortalUrl}\n\nTerima kasih!`;
+    const textWa = `Halo kak ${clientName},\n\nBerikut link folder untuk melihat galeri foto mentah: ${finalizedInput.link}\n\nKakak mendapat paket ${getAlbumLabel(finalizedInput.albumType)} (Maksimal ${finalizedInput.maxPhotos} foto).\n\nSilakan pilih foto langsung melalui galeri interaktif kami di link berikut:\n${clientPortalUrl}\n\nTerima kasih!`;
 
     window.open(`https://wa.me/?text=${encodeURIComponent(textWa)}`, '_blank');
     setAdminInputs((prev) => ({
@@ -525,7 +537,13 @@ export default function AdminDashboardPage() {
                           const sisa = Math.max(total - paid, 0);
                           
                           // --- TAMBAHAN: MENGAMBIL DATA INPUT ADMIN SAAT INI UNTUK BARIS INI ---
-                          const inputData = adminInputs[b.id] || { link: "", albumType: "10_sheet", maxPhotos: DEFAULT_MAX_PHOTOS, sendCount: 0 };
+                          const inputData = adminInputs[b.id] || {
+                            link: "",
+                            albumType: defaultAlbum.value,
+                            maxPhotos: defaultAlbum.maxPhotos,
+                            sendCount: 0,
+                          };
+                          const selectedAlbum = resolveAlbumType(inputData.albumType);
 
                           return (
                             <tr key={b.id} className="border-b border-white/5 hover:bg-white/[0.02] group">
@@ -553,12 +571,15 @@ export default function AdminDashboardPage() {
                                         Tipe Album
                                       </label>
                                       <select 
-                                        value={inputData.albumType}
+                                        value={selectedAlbum.value}
                                         onChange={(e) => handleInputChange(b.id, "albumType", e.target.value)}
                                         className="h-10 w-full bg-black/60 border border-white/10 rounded-xl px-3 text-xs text-white focus:border-amber-500 outline-none transition-colors cursor-pointer"
                                       >
-                                        <option value="10_sheet">Kolase 10 Sheet</option>
-                                        <option value="15_sheet">Kolase 15 Sheet</option>
+                                        {ALBUM_TYPES.map((album) => (
+                                          <option key={album.value} value={album.value}>
+                                            {album.label}
+                                          </option>
+                                        ))}
                                       </select>
                                     </div>
                                     <div>
@@ -568,13 +589,10 @@ export default function AdminDashboardPage() {
                                       <div className="relative">
                                         <input
                                           type="number"
-                                          min={1}
-                                          max={DEFAULT_MAX_PHOTOS}
-                                          value={inputData.maxPhotos}
-                                          onChange={(e) => handleInputChange(b.id, "maxPhotos", e.target.value)}
-                                          className="h-10 w-full bg-black/60 border border-white/10 rounded-xl px-3 pr-10 text-xs text-white focus:border-amber-500 outline-none transition-colors"
-                                          title="Jumlah maksimal foto yang dapat dipilih oleh konsumen"
-                                          placeholder="135"
+                                          readOnly
+                                          value={getAlbumMaxPhotos(selectedAlbum.value)}
+                                          className="h-10 w-full bg-black/40 border border-white/10 rounded-xl px-3 pr-10 text-xs text-white/80 outline-none cursor-not-allowed"
+                                          title="Batas foto mengikuti tipe album yang dipilih"
                                         />
                                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-white/40 pointer-events-none">
                                           foto

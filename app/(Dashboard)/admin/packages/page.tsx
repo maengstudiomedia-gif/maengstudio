@@ -12,7 +12,7 @@ export default function PackagesPage() {
           Manajemen <span className="font-bold">Katalog Paket</span>
         </h2>
         <p className="text-white/40 mt-2 text-sm">
-          Tambah, ubah, atau hapus paket layanan yang akan tampil otomatis di Dashboard Klien.
+          Tambah, ubah, atau hapus paket layanan yang akan tampil otomatis di halaman booking publik dan dashboard klien.
         </p>
       </header>
       

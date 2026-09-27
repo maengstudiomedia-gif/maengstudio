@@ -94,8 +94,10 @@ export async function createPackageAction(formData: FormData) {
 
     if (error) return { success: false, error: error.message };
     
-    // Refresh halaman agar data baru langsung muncul
-    revalidatePath("/admin/packages"); // Sesuaikan dengan URL admin Anda
+    // Refresh halaman agar data baru langsung muncul di admin & booking publik
+    revalidatePath("/admin/packages");
+    revalidatePath("/book");
+    revalidatePath("/");
     
     return { success: true };
   } catch (error: any) {
@@ -151,8 +153,9 @@ export async function updatePackageAction(formData: FormData) {
 
     if (error) return { success: false, error: error.message };
     
-    // Refresh halaman
-    revalidatePath("/admin/packages"); 
+    revalidatePath("/admin/packages");
+    revalidatePath("/book");
+    revalidatePath("/");
 
     return { success: true };
   } catch (error: any) {
@@ -183,6 +186,8 @@ export async function deletePackageAction(id: string, imageUrl?: string) {
     if (error) return { success: false, error: error.message };
 
     revalidatePath("/admin/packages");
+    revalidatePath("/book");
+    revalidatePath("/");
     return { success: true };
   } catch (error: any) {
     return { success: false, error: error.message };

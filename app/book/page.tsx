@@ -1,6 +1,8 @@
 import { getPublicPackages } from "@/app/actions/publicActions";
 import BookingPageClient from "./BookingPageClient";
 
+export const dynamic = "force-dynamic";
+
 interface BookPageProps {
   searchParams?: {
     name?: string;

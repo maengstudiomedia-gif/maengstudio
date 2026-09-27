@@ -20,6 +20,12 @@ import {
   savePendingSelectionAction,
 } from "@/app/actions/driveActions";
 import AlertModal from "@/app/(Dashboard)/admin/components/AlertModal";
+import {
+  DEFAULT_ALBUM_TYPE,
+  getAlbumLabel,
+  getAlbumMaxPhotos,
+  normalizeAlbumMaxPhotos,
+} from "@/lib/album-types";
 
 type PhotoOrientation = "landscape" | "portrait" | "square";
 type Photo = {
@@ -32,16 +38,6 @@ type Photo = {
 type PhotoFilter = "all" | "selected" | "available";
 
 const DENSE_ALBUM_THRESHOLD = 100;
-const HARD_ALBUM_LIMIT = 135;
-const LEGACY_LOW_CAP = 60;
-
-function normalizeMaxPhotos(raw: number): number {
-  const normalized = Number.isFinite(raw) ? raw : HARD_ALBUM_LIMIT;
-  return Math.min(
-    HARD_ALBUM_LIMIT,
-    Math.max(1, normalized <= LEGACY_LOW_CAP ? HARD_ALBUM_LIMIT : normalized)
-  );
-}
 
 function buildFallbackPhoto(id: string, bookingId: string, portalToken: string, name?: string): Photo {
   return {
@@ -64,7 +60,8 @@ export default function ClientGalleryPortal({
 
   const [resolvedDriveLink, setResolvedDriveLink] = useState("");
   const [resolvedClientName, setResolvedClientName] = useState("Klien");
-  const [resolvedMaxPhotos, setResolvedMaxPhotos] = useState(HARD_ALBUM_LIMIT);
+  const [resolvedAlbumType, setResolvedAlbumType] = useState<string>(DEFAULT_ALBUM_TYPE);
+  const [resolvedMaxPhotos, setResolvedMaxPhotos] = useState(getAlbumMaxPhotos(DEFAULT_ALBUM_TYPE));
   const [sessionLoaded, setSessionLoaded] = useState(false);
   const [configError, setConfigError] = useState<string | null>(null);
 
@@ -93,6 +90,7 @@ export default function ClientGalleryPortal({
   const [pendingSaveStatus, setPendingSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   const maxPhotos = resolvedMaxPhotos;
+  const albumLabel = getAlbumLabel(resolvedAlbumType);
   const folderLinkDariAdmin = resolvedDriveLink;
   const clientName = resolvedClientName;
 
@@ -170,11 +168,12 @@ export default function ClientGalleryPortal({
 
         const driveLink = session.driveLink || "";
         const name = session.clientName || "Klien";
-        const max =
-          session.maxPhotos ? normalizeMaxPhotos(session.maxPhotos) : HARD_ALBUM_LIMIT;
+        const albumType = session.albumType || DEFAULT_ALBUM_TYPE;
+        const max = normalizeAlbumMaxPhotos(session.maxPhotos, albumType);
 
         setResolvedDriveLink(driveLink);
         setResolvedClientName(name);
+        setResolvedAlbumType(albumType);
         setResolvedMaxPhotos(max);
         setMovedPhotos(session.movedPhotos);
         setMovedFileIds(session.movedFileIds);
@@ -253,7 +252,7 @@ export default function ClientGalleryPortal({
     if (isSelecting) {
       if (currentCommitted >= maxPhotos) {
         setErrorMessage(
-          `Batas maksimal album adalah ${maxPhotos} foto. Anda tidak dapat menambahkan foto lagi.`
+          `Batas maksimal ${albumLabel} adalah ${maxPhotos} foto. Anda tidak dapat menambahkan foto lagi.`
         );
         return;
       }
@@ -261,8 +260,8 @@ export default function ClientGalleryPortal({
       if (selectedIds.length >= remainingSlots) {
         setErrorMessage(
           movedCount > 0
-            ? `Anda sudah memindahkan ${movedCount} foto. Maksimal bisa memilih ${remainingSlots} foto lagi.`
-            : `Maksimal hanya bisa memilih ${maxPhotos} foto!`
+            ? `Anda sudah memindahkan ${movedCount} foto. Untuk ${albumLabel}, maksimal bisa memilih ${remainingSlots} foto lagi.`
+            : `Untuk ${albumLabel}, maksimal hanya bisa memilih ${maxPhotos} foto!`
         );
         return;
       }
@@ -458,7 +457,8 @@ export default function ClientGalleryPortal({
             <CheckCircle2 className="mx-auto mb-3 h-14 w-14 text-emerald-500" />
             <h2 className="text-2xl font-light">Pilihan Foto Tersimpan</h2>
             <p className="mt-2 text-sm text-white/60">
-              Terima kasih, {clientName}. Foto di bawah ini sudah dipilih untuk album Anda.
+              Terima kasih, {clientName}. Foto di bawah ini sudah dipilih untuk {albumLabel} Anda
+              (maksimal {maxPhotos} foto).
             </p>
             <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
               <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-5 py-3">
@@ -467,7 +467,7 @@ export default function ClientGalleryPortal({
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-3">
                 <p className="text-2xl font-semibold text-white">{movedCount} / {maxPhotos}</p>
-                <p className="text-[11px] text-white/50">kuota album terpakai</p>
+                <p className="text-[11px] text-white/50">kuota {albumLabel}</p>
               </div>
             </div>
           </div>
@@ -569,6 +569,9 @@ export default function ClientGalleryPortal({
         <div>
           <h1 className="text-xl font-light text-white tracking-wide">Pilih Foto Cetak</h1>
           <p className="text-xs text-white/50">Klien: {clientName}</p>
+          <p className="mt-1 text-[11px] text-amber-300/80">
+            {albumLabel} · maks. {maxPhotos} foto
+          </p>
         </div>
         <div className="text-right">
           <div className="text-2xl font-light text-amber-500">
@@ -917,7 +920,7 @@ export default function ClientGalleryPortal({
             <div>
               <h2 className="text-lg font-medium text-white">Foto Sudah Dipindahkan</h2>
               <p className="text-xs text-white/50">
-                {movedCount} foto sudah dipindah{maxPhotos ? ` · Maksimal ${maxPhotos} foto` : ""}
+                {movedCount} foto sudah dipindah{maxPhotos ? ` · Maksimal ${maxPhotos} foto (${albumLabel})` : ""}
               </p>
             </div>
             <button

@@ -2,7 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createPublicBookingAction } from "@/app/actions/booking";
-import { Loader2, ArrowRight, CheckCircle2, Plus, Trash2 } from "lucide-react";
+import { getPublicPackages } from "@/app/actions/publicActions";
+import { PACKAGE_CATEGORIES, getPackageCategoryLabel } from "@/lib/package-categories";
+import {
+  Loader2,
+  ArrowRight,
+  CheckCircle2,
+  Plus,
+  Trash2,
+  Printer,
+  Package,
+} from "lucide-react";
 
 interface BookingPageClientProps {
   initialName: string;
@@ -19,13 +29,33 @@ interface EventRow {
   startTime: string;
 }
 
-export default function BookingPageClient({ initialName, initialPhone, initialPackageId, packages }: BookingPageClientProps) {
+type CategoryFilter = "all" | string;
+
+function parseStringList(value: unknown): string[] {
+  try {
+    if (typeof value === "string") return JSON.parse(value);
+    if (Array.isArray(value)) return value.map(String);
+  } catch {
+    // ignore malformed JSON
+  }
+  return [];
+}
+
+export default function BookingPageClient({
+  initialName,
+  initialPhone,
+  initialPackageId,
+  packages: initialPackages,
+}: BookingPageClientProps) {
   const [isPageReady, setIsPageReady] = useState(false);
+  const [isLoadingPackages, setIsLoadingPackages] = useState(true);
+  const [packages, setPackages] = useState<any[]>(initialPackages || []);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [name, setName] = useState(initialName);
   const [phone, setPhone] = useState(initialPhone);
   const [selectedPackageId, setSelectedPackageId] = useState(initialPackageId);
   const [events, setEvents] = useState<EventRow[]>([
-    { id: Date.now().toString(), date: "", address: "", eventName: "", startTime: "" }
+    { id: Date.now().toString(), date: "", address: "", eventName: "", startTime: "" },
   ]);
   const [notes, setNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -39,22 +69,83 @@ export default function BookingPageClient({ initialName, initialPhone, initialPa
     return () => window.clearTimeout(timer);
   }, [initialName, initialPhone, initialPackageId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshPackages() {
+      setIsLoadingPackages(true);
+      try {
+        const result = await getPublicPackages();
+        if (cancelled) return;
+        if (result.success) {
+          const nextPackages = result.data || [];
+          setPackages(nextPackages);
+
+          if (initialPackageId) {
+            const matched = nextPackages.find((pkg: any) => String(pkg.id) === String(initialPackageId));
+            if (matched) {
+              setSelectedPackageId(String(matched.id));
+              const category = String(matched.type || "").toLowerCase();
+              if (PACKAGE_CATEGORIES.some((item) => item.value === category)) {
+                setCategoryFilter(category);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Gagal memuat paket publik:", error);
+      } finally {
+        if (!cancelled) setIsLoadingPackages(false);
+      }
+    }
+
+    refreshPackages();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialPackageId]);
+
+  const availableCategories = useMemo(() => {
+    const present = new Set(
+      packages.map((pkg) => String(pkg.type || "").toLowerCase()).filter(Boolean)
+    );
+    const known = PACKAGE_CATEGORIES.filter((category) => present.has(category.value));
+    const hasOther = packages.some(
+      (pkg) => !PACKAGE_CATEGORIES.some((category) => String(pkg.type || "").toLowerCase() === category.value)
+    );
+    return hasOther ? [...known, { value: "other", label: "Lainnya" }] : known;
+  }, [packages]);
+
+  const filteredPackages = useMemo(() => {
+    if (categoryFilter === "all") return packages;
+    if (categoryFilter === "other") {
+      return packages.filter(
+        (pkg) => !PACKAGE_CATEGORIES.some((category) => String(pkg.type || "").toLowerCase() === category.value)
+      );
+    }
+    return packages.filter((pkg) => String(pkg.type || "").toLowerCase() === categoryFilter);
+  }, [packages, categoryFilter]);
+
   const selectedPackage = useMemo(() => {
-    return packages.find((pkg) => String(pkg.id) === String(selectedPackageId)) || packages[0] || null;
+    return packages.find((pkg) => String(pkg.id) === String(selectedPackageId)) || null;
   }, [packages, selectedPackageId]);
 
   const totalPrice = selectedPackage ? Number(selectedPackage.price || 0) : 0;
   const dpAmount = totalPrice * 0.5;
 
   const formatRupiah = (value: number) => {
-    return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(value);
+    return new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      maximumFractionDigits: 0,
+    }).format(value);
   };
 
   const addEvent = () => {
     if (events.length >= 2) return;
     setEvents((prev) => [
       ...prev,
-      { id: Date.now().toString(), date: "", address: "", eventName: "", startTime: "" }
+      { id: Date.now().toString(), date: "", address: "", eventName: "", startTime: "" },
     ]);
   };
 
@@ -64,7 +155,7 @@ export default function BookingPageClient({ initialName, initialPhone, initialPa
   };
 
   const updateEvent = (index: number, field: keyof EventRow, value: string) => {
-    setEvents((prev) => prev.map((event, idx) => idx === index ? { ...event, [field]: value } : event));
+    setEvents((prev) => prev.map((event, idx) => (idx === index ? { ...event, [field]: value } : event)));
   };
 
   const validateForm = () => {
@@ -110,7 +201,9 @@ export default function BookingPageClient({ initialName, initialPhone, initialPa
       if (result.success) {
         setMessage({
           type: "success",
-          text: result.message || "Booking berhasil terkirim. Silakan melakukan pembayaran dan konfirmasi ke WA admin 08117873878."
+          text:
+            result.message ||
+            "Booking berhasil terkirim. Silakan melakukan pembayaran dan konfirmasi ke WA admin 08117873878.",
         });
       } else {
         setMessage({ type: "error", text: result.message || "Gagal membuat booking publik." });
@@ -139,7 +232,7 @@ export default function BookingPageClient({ initialName, initialPhone, initialPa
 
   return (
     <div className="min-h-screen bg-[#050505] text-white py-16 px-4 md:px-8">
-      <div className="max-w-5xl mx-auto space-y-8">
+      <div className="max-w-6xl mx-auto space-y-8">
         <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-8 shadow-lg shadow-black/20">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -157,12 +250,18 @@ export default function BookingPageClient({ initialName, initialPhone, initialPa
         </div>
 
         {message && (
-          <div className={`rounded-3xl p-4 text-sm font-medium ${message.type === "success" ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20" : "bg-rose-500/10 text-rose-300 border border-rose-500/20"}`}>
+          <div
+            className={`rounded-3xl p-4 text-sm font-medium ${
+              message.type === "success"
+                ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
+                : "bg-rose-500/10 text-rose-300 border border-rose-500/20"
+            }`}
+          >
             {message.text}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="grid gap-8 md:grid-cols-[1.2fr_0.8fr]">
+        <form onSubmit={handleSubmit} className="grid gap-8 lg:grid-cols-[1.35fr_0.65fr]">
           <div className="space-y-6">
             <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 space-y-6">
               <div>
@@ -194,28 +293,123 @@ export default function BookingPageClient({ initialName, initialPhone, initialPa
             <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 space-y-6">
               <div>
                 <h2 className="text-xl font-semibold">Pilih Paket</h2>
-                <p className="text-sm text-white/50 mt-1">Pilih paket agar harga dan detail acara terhitung otomatis.</p>
+                <p className="text-sm text-white/50 mt-1">
+                  Paket diambil langsung dari katalog admin. Filter berdasarkan kategori lalu pilih kartu paket.
+                </p>
               </div>
-              <div className="space-y-4">
-                <select
-                  value={selectedPackageId}
-                  onChange={(e) => setSelectedPackageId(e.target.value)}
-                  className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none focus:border-amber-400"
-                >
-                  <option value="">Pilih paket...</option>
-                  {packages.map((pkg) => (
-                    <option key={pkg.id} value={String(pkg.id)}>{pkg.name} — {formatRupiah(Number(pkg.price || 0))}</option>
-                  ))}
-                </select>
 
-                {selectedPackage && (
-                  <div className="rounded-3xl bg-white/5 border border-white/10 p-4">
-                    <p className="text-sm text-white/60">Paket terpilih:</p>
-                    <p className="mt-2 text-lg font-semibold text-white">{selectedPackage.name}</p>
-                    <p className="text-sm text-white/50 mt-2">{selectedPackage.description || "Tidak ada deskripsi paket."}</p>
-                  </div>
-                )}
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCategoryFilter("all")}
+                  className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                    categoryFilter === "all"
+                      ? "bg-amber-500 text-black"
+                      : "border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                  }`}
+                >
+                  Semua
+                </button>
+                {availableCategories.map((category) => (
+                  <button
+                    key={category.value}
+                    type="button"
+                    onClick={() => setCategoryFilter(category.value)}
+                    className={`rounded-full px-4 py-2 text-xs font-semibold transition ${
+                      categoryFilter === category.value
+                        ? "bg-amber-500 text-black"
+                        : "border border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
+                    }`}
+                  >
+                    {category.label}
+                  </button>
+                ))}
               </div>
+
+              {isLoadingPackages ? (
+                <div className="flex items-center justify-center gap-3 py-16 text-white/60">
+                  <Loader2 className="h-5 w-5 animate-spin text-amber-500" />
+                  Memuat paket terbaru dari database...
+                </div>
+              ) : filteredPackages.length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-white/10 bg-white/[0.02] px-6 py-12 text-center text-sm text-white/50">
+                  Belum ada paket
+                  {categoryFilter !== "all"
+                    ? ` untuk kategori ${availableCategories.find((item) => item.value === categoryFilter)?.label || categoryFilter}`
+                    : ""}
+                  . Silakan hubungi admin atau pilih kategori lain.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {filteredPackages.map((pkg) => {
+                    const isSelected = String(pkg.id) === String(selectedPackageId);
+                    const featuresList = parseStringList(pkg.features);
+                    const printsList = parseStringList(pkg.print_results);
+                    const displayImage = pkg.image_url || pkg.image;
+
+                    return (
+                      <button
+                        key={pkg.id}
+                        type="button"
+                        onClick={() => setSelectedPackageId(String(pkg.id))}
+                        className={`text-left rounded-3xl border p-5 transition-all ${
+                          isSelected
+                            ? "border-amber-500/60 bg-amber-500/[0.08] shadow-[0_0_30px_rgba(245,158,11,0.08)]"
+                            : "border-white/10 bg-white/[0.02] hover:border-white/25"
+                        }`}
+                      >
+                        <div className="relative mb-4 h-40 overflow-hidden rounded-2xl border border-white/5 bg-white/[0.03]">
+                          {displayImage ? (
+                            <img src={displayImage} alt={pkg.name} className="h-full w-full object-cover" />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center text-white/20">
+                              <Package className="h-10 w-10" />
+                            </div>
+                          )}
+                          <span className="absolute left-3 top-3 rounded-full border border-white/10 bg-black/50 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-300 backdrop-blur-md">
+                            {getPackageCategoryLabel(pkg.type)}
+                          </span>
+                          {isSelected && (
+                            <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-black">
+                              <CheckCircle2 className="h-3 w-3" /> Dipilih
+                            </span>
+                          )}
+                        </div>
+
+                        <h3 className="text-lg font-semibold text-white">{pkg.name}</h3>
+                        <p className="mt-2 text-xl font-bold text-amber-400">{formatRupiah(Number(pkg.price || 0))}</p>
+                        <p className="mt-2 text-sm leading-relaxed text-white/55">
+                          {pkg.description || "Tidak ada deskripsi paket."}
+                        </p>
+
+                        {featuresList.length > 0 && (
+                          <div className="mt-4 space-y-2">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Termasuk</p>
+                            {featuresList.map((feature, idx) => (
+                              <div key={`${pkg.id}-feat-${idx}`} className="flex items-start gap-2 text-sm text-white/75">
+                                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                                <span className="leading-tight">{feature}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {printsList.length > 0 && (
+                          <div className="mt-4 space-y-2 border-t border-white/5 pt-4">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">Hasil Cetak</p>
+                            {printsList.map((printItem, idx) => (
+                              <div key={`${pkg.id}-print-${idx}`} className="flex items-start gap-2 text-sm text-white/75">
+                                <Printer className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+                                <span className="leading-tight">{printItem}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 space-y-6">
@@ -309,20 +503,30 @@ export default function BookingPageClient({ initialName, initialPhone, initialPa
             </div>
           </div>
 
-          <aside className="space-y-6">
+          <aside className="space-y-6 lg:sticky lg:top-8 self-start">
             <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 space-y-4">
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <h2 className="text-xl font-semibold">Ringkasan</h2>
                   <p className="text-sm text-white/50 mt-1">Harga paket dan total DP.</p>
                 </div>
-                <div className="rounded-3xl bg-amber-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-amber-300">Booking Publik</div>
+                <div className="rounded-3xl bg-amber-500/10 px-3 py-1 text-xs uppercase tracking-[0.2em] text-amber-300">
+                  Booking Publik
+                </div>
               </div>
               <div className="space-y-3 text-sm text-white/70">
-                <div className="flex items-center justify-between">
+                <div className="flex items-start justify-between gap-4">
                   <span>Paket</span>
-                  <span>{selectedPackage ? selectedPackage.name : "-"}</span>
+                  <span className="text-right font-medium text-white">
+                    {selectedPackage ? selectedPackage.name : "Belum dipilih"}
+                  </span>
                 </div>
+                {selectedPackage && (
+                  <div className="flex items-center justify-between">
+                    <span>Kategori</span>
+                    <span>{getPackageCategoryLabel(selectedPackage.type)}</span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <span>Harga</span>
                   <span>{formatRupiah(totalPrice)}</span>
@@ -349,7 +553,9 @@ export default function BookingPageClient({ initialName, initialPhone, initialPa
               <div className="rounded-3xl bg-white/5 border border-white/10 p-4 text-sm space-y-3">
                 <p className="text-white/80 font-medium">Tunai</p>
                 <p className="text-white/60 text-xs">Bayar langsung di Galeri Maeng Studio.</p>
-                <p className="text-white/60 text-xs">Alamat: Jl. Kapten Robani Kadir LRG Maeng No 06 RT 016 RW 004 Kel. Talangputri, Kec. Plaju.</p>
+                <p className="text-white/60 text-xs">
+                  Alamat: Jl. Kapten Robani Kadir LRG Maeng No 06 RT 016 RW 004 Kel. Talangputri, Kec. Plaju.
+                </p>
                 <a
                   href="https://maps.app.goo.gl/j1RSyaHJm1ucJDX19"
                   target="_blank"
@@ -363,7 +569,7 @@ export default function BookingPageClient({ initialName, initialPhone, initialPa
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !selectedPackage}
               className="w-full rounded-3xl bg-amber-500 px-6 py-4 text-sm font-semibold text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60 flex items-center justify-center gap-2"
             >
               {isSubmitting ? (

@@ -11,6 +11,7 @@ import {
   getOrCreateClientPrintFolder,
   hasServiceAccountDriveConfig,
 } from "@/lib/google-drive";
+import { HARD_ALBUM_LIMIT, getAlbumLabel, normalizeAlbumMaxPhotos } from "@/lib/album-types";
 import { supabaseAdmin, mergeBookingNotesPatch, requireAdmin } from "@/app/actions/adminBookings/utils";
 
 type DrivePhoto = {
@@ -50,17 +51,17 @@ export type SortirSession = {
   sourceFolderId: string | null;
   clientName: string | null;
   maxPhotos: number | null;
+  albumType: string | null;
 };
 
-const HARD_ALBUM_LIMIT = 135;
+const HARD_LIMIT = HARD_ALBUM_LIMIT;
 
 function buildDriveFolderLink(sourceFolderId: string): string {
   return `https://drive.google.com/drive/folders/${sourceFolderId}`;
 }
 
-function normalizeMaxPhotos(value: number | null | undefined): number {
-  if (!value || !Number.isFinite(value)) return HARD_ALBUM_LIMIT;
-  return Math.min(HARD_ALBUM_LIMIT, Math.max(1, value));
+function normalizeMaxPhotos(value: number | null | undefined, albumType?: unknown): number {
+  return normalizeAlbumMaxPhotos(value, albumType);
 }
 
 function parseSortirNotes(notes: unknown): SortirNotes | null {
@@ -455,9 +456,9 @@ export async function submitClientSelectionAction(
   try {
     const sortirNotes = await requirePortalNotes(bookingId, portalToken);
     const sourceFolderId = sortirNotes.sourceFolderId;
-    const allowedMaxPhotos = normalizeMaxPhotos(sortirNotes.maxPhotos ?? maxPhotos);
+    const allowedMaxPhotos = normalizeMaxPhotos(sortirNotes.maxPhotos ?? maxPhotos, sortirNotes.albumType);
     if (!sourceFolderId) throw new Error("Folder sumber portal belum dikonfigurasi.");
-    if (!Array.isArray(selectedFileIds) || selectedFileIds.some((id) => typeof id !== "string") || selectedFileIds.length > HARD_ALBUM_LIMIT) {
+    if (!Array.isArray(selectedFileIds) || selectedFileIds.some((id) => typeof id !== "string") || selectedFileIds.length > HARD_LIMIT) {
       return { success: false, message: "Daftar foto tidak valid." };
     }
     if (selectedFileIds.length !== allowedMaxPhotos) {
@@ -550,7 +551,8 @@ export async function getSortirSessionAction(
       driveLink,
       sourceFolderId,
       clientName: sortirNotes?.clientName ?? null,
-      maxPhotos: sortirNotes?.maxPhotos ?? null,
+      maxPhotos: normalizeMaxPhotos(sortirNotes?.maxPhotos, sortirNotes?.albumType),
+      albumType: sortirNotes?.albumType ?? null,
     };
   } catch (error) {
     console.error("Gagal mengambil sesi sortir:", error);
@@ -620,7 +622,7 @@ export async function persistPortalConfigAction(
         ...existing,
         driveLink: config.driveLink,
         sourceFolderId,
-        maxPhotos: normalizeMaxPhotos(config.maxPhotos),
+        maxPhotos: normalizeMaxPhotos(config.maxPhotos, config.albumType),
         clientName: config.clientName,
         albumType: config.albumType,
         portalToken,
@@ -664,7 +666,7 @@ export async function moveSinglePhotoAction(
     const session = await getSortirSessionAction(bookingId, portalToken);
     const clientName = session.clientName || "Klien";
     const originalFolderLink = session.driveLink;
-    const maxPhotos = normalizeMaxPhotos(session.maxPhotos);
+    const maxPhotos = normalizeMaxPhotos(session.maxPhotos, session.albumType);
     if (!originalFolderLink) throw new Error("Folder sumber portal belum dikonfigurasi.");
     const targetFolderId = getCentralSortirFolderId();
     if (!targetFolderId) {
@@ -690,7 +692,7 @@ export async function moveSinglePhotoAction(
     if (currentMoved.length >= maxPhotos) {
       return {
         success: false,
-        message: `Sudah mencapai batas ${maxPhotos} foto. Tidak bisa memindahkan foto lagi.`,
+        message: `Sudah mencapai batas ${maxPhotos} foto untuk ${getAlbumLabel(session.albumType)}. Tidak bisa memindahkan foto lagi.`,
       };
     }
 
@@ -742,7 +744,7 @@ export async function revertMovedPhotoAction(
     const session = await getSortirSessionAction(bookingId, portalToken);
     const clientName = session.clientName || "Klien";
     const originalFolderLink = session.driveLink;
-    const maxPhotos = normalizeMaxPhotos(session.maxPhotos);
+    const maxPhotos = normalizeMaxPhotos(session.maxPhotos, session.albumType);
     if (!originalFolderLink) throw new Error("Folder sumber portal belum dikonfigurasi.");
     const targetFolderId = getCentralSortirFolderId();
     if (!targetFolderId) {
