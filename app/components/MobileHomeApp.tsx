@@ -12,6 +12,8 @@ import {
   ChevronRight,
   CircleUserRound,
   ClipboardList,
+  CreditCard,
+  FileText,
   LoaderCircle,
   MapPin,
   Mic2,
@@ -88,6 +90,25 @@ function parseList(value: unknown): string[] {
   }
 }
 
+function parseEventDetails(value: unknown): Record<string, unknown>[] {
+  let parsed = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  if (Array.isArray(parsed)) return parsed.filter((item) => item && typeof item === "object") as Record<string, unknown>[];
+  return parsed && typeof parsed === "object" ? [parsed as Record<string, unknown>] : [];
+}
+
+function formatOrderDate(value: unknown) {
+  if (!value) return "-";
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString("id-ID", { dateStyle: "long" });
+}
+
 function newEvent(): EventForm {
   return { id: `${Date.now()}-${Math.random()}`, date: "", eventName: "", startTime: "", address: "" };
 }
@@ -100,11 +121,13 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
   const category = initialCategory || "all";
   const [query, setQuery] = useState("");
   const [cartIds, setCartIds] = useState<string[]>([]);
-  const [cartLoaded, setCartLoaded] = useState(false);
+  const [cartOwnerId, setCartOwnerId] = useState("");
   const [user, setUser] = useState<any>(null);
   const [balance, setBalance] = useState(0);
   const [bookings, setBookings] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
   const [loadingBookings, setLoadingBookings] = useState(false);
+  const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
   const [selectedPackage, setSelectedPackage] = useState<PackageItem | null>(null);
   const [events, setEvents] = useState<EventForm[]>([newEvent()]);
   const [notes, setNotes] = useState("");
@@ -118,6 +141,7 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notice, setNotice] = useState("");
   const [pendingPackageId, setPendingPackageId] = useState("");
+  const [pendingCartPackageId, setPendingCartPackageId] = useState("");
   const [pendingView, setPendingView] = useState<AppView | "">("");
 
   useEffect(() => {
@@ -149,24 +173,35 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
   }, []);
 
   useEffect(() => {
+    if (!user) {
+      setCartIds([]);
+      setCartOwnerId("");
+      return;
+    }
+
     try {
-      const savedCart = JSON.parse(window.localStorage.getItem("maeng-cart-v1") || "[]");
+      const savedCart = JSON.parse(window.localStorage.getItem(`maeng-cart-v1-${user.id}`) || "[]");
       if (Array.isArray(savedCart)) setCartIds(savedCart.map(String));
     } catch {
       setCartIds([]);
     }
-    setCartLoaded(true);
-
-    const params = new URLSearchParams(window.location.search);
-    const packageId = params.get("book");
-    const requestedView = params.get("tab");
-    if (packageId) setPendingPackageId(packageId);
-    if (requestedView === "active" || requestedView === "cart") setPendingView(requestedView);
-  }, []);
+    setCartOwnerId(user.id);
+  }, [user?.id]);
 
   useEffect(() => {
-    if (cartLoaded) window.localStorage.setItem("maeng-cart-v1", JSON.stringify(cartIds));
-  }, [cartIds, cartLoaded]);
+    if (!cartOwnerId || user?.id !== cartOwnerId) return;
+    window.localStorage.setItem(`maeng-cart-v1-${cartOwnerId}`, JSON.stringify(cartIds));
+  }, [cartIds, cartOwnerId, user?.id]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const packageId = params.get("book");
+    const cartPackageId = params.get("add");
+    const requestedView = params.get("tab");
+    if (packageId) setPendingPackageId(packageId);
+    if (cartPackageId) setPendingCartPackageId(cartPackageId);
+    if (requestedView === "active" || requestedView === "cart") setPendingView(requestedView);
+  }, []);
 
   const filteredPackages = useMemo(() => {
     return packages.filter((item) => {
@@ -234,6 +269,7 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
     const result = await getClientDashboardData();
     if (result.success) {
       setBookings(result.bookings || []);
+      setInvoices(result.invoices || []);
       if (result.user) setUser(result.user);
       setBalance(Number(result.balance) || 0);
     }
@@ -259,6 +295,12 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
       void loadBookings();
       return;
     }
+    if (nextView === "cart") {
+      const currentUser = await verifyUser("/?tab=cart");
+      if (!currentUser) return;
+      setView("cart");
+      return;
+    }
     if (nextView === "home" && initialCategory) {
       router.push("/");
       return;
@@ -267,12 +309,35 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
     if (nextView === "home") window.history.replaceState(null, "", "/");
   };
 
-  const addToCart = (item: PackageItem) => {
+  const addToCart = async (item: PackageItem) => {
     const id = String(item.id);
-    setCartIds((current) => current.includes(id) ? current : [...current, id]);
+    const currentUser = await verifyUser(`/?add=${encodeURIComponent(id)}`);
+    if (!currentUser) return;
+
+    if (cartOwnerId !== currentUser.id) {
+      let savedCart: string[] = [];
+      try {
+        const parsed: unknown = JSON.parse(window.localStorage.getItem(`maeng-cart-v1-${currentUser.id}`) || "[]");
+        if (Array.isArray(parsed)) savedCart = parsed.map(String);
+      } catch {
+        savedCart = [];
+      }
+      setCartOwnerId(currentUser.id);
+      setCartIds([...new Set([...savedCart, id])]);
+    } else {
+      setCartIds((current) => current.includes(id) ? current : [...current, id]);
+    }
+    setView("cart");
     setNotice(`${item.name} ditambahkan ke keranjang.`);
     window.setTimeout(() => setNotice(""), 2600);
   };
+
+  useEffect(() => {
+    if (!pendingCartPackageId || packages.length === 0 || !user || cartOwnerId !== user.id) return;
+    const item = packages.find((entry) => String(entry.id) === pendingCartPackageId);
+    setPendingCartPackageId("");
+    if (item) void addToCart(item);
+  }, [pendingCartPackageId, packages, user, cartOwnerId]);
 
   const updateEvent = (index: number, field: keyof Omit<EventForm, "id">, value: string) => {
     setEvents((current) => current.map((event, eventIndex) =>
@@ -323,12 +388,24 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
   };
 
   const allCategories = [
-    { value: "all", label: "Paket", icon: Package },
     ...PACKAGE_CATEGORIES.map((entry) => ({ ...entry, icon: categoryIcons[entry.value] || Package })),
     ...(packages.some((item) => !PACKAGE_CATEGORIES.some((entry) => entry.value === String(item.type || "").toLowerCase()))
       ? [{ value: "other", label: "Lainnya", icon: Package }]
       : []),
   ];
+  const customerName = String(user?.user_metadata?.full_name || user?.user_metadata?.name || "Customer").trim();
+  const selectedInvoice = selectedBooking
+    ? invoices.find((invoice) => String(invoice.booking_id) === String(selectedBooking.id))
+    : null;
+  const selectedPackageInfo = selectedBooking
+    ? packages.find((item) => String(item.id) === String(selectedBooking.package_id))
+    : null;
+  const selectedEvents = selectedBooking ? parseEventDetails(selectedBooking.event_details) : [];
+  const needsDownPayment = selectedBooking?.status === "pending_payment" || selectedInvoice?.payment_status === "unpaid";
+  const remainingDownPayment = Math.max(
+    Number(selectedInvoice?.dp_amount || Number(selectedInvoice?.total_amount || 0) * 0.5) - Number(selectedInvoice?.paid_amount || 0),
+    0
+  );
 
   return (
     <div className="min-h-screen bg-[#f3f7f4] text-[#18271f]">
@@ -357,7 +434,7 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
               <img src={bannerImage} alt="" className="absolute inset-0 -z-20 h-full w-full object-cover" />
               <div className="absolute inset-0 -z-10 bg-gradient-to-r from-[#0a2017]/95 via-[#0a2017]/70 to-[#0a2017]/10" />
               <div className="max-w-[290px]">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#a5e8bd]">Momen penting, kami bantu</p>
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#a5e8bd]">{user ? `Selamat Datang, ${customerName}` : "Momen penting, kami bantu"}</p>
                 <h2 className="text-[24px] font-bold leading-[1.12]">Semua kebutuhan acara dalam satu tempat.</h2>
                 <p className="mt-2 text-xs text-white/75">Pilih layanan, cek tanggal, lalu pesan dengan mudah.</p>
               </div>
@@ -403,7 +480,7 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
               <button type="button" onClick={() => router.push("/")} aria-label="Kembali ke beranda" className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-[#e2eae4] bg-white text-[#087b45] transition hover:bg-[#e8f4ec]"><ArrowLeft className="h-4 w-4" /></button>
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#7c8b82]">Paket Maeng Studio</p>
-                <h2 className="mt-1 truncate text-xl font-bold">{category === "all" ? "Semua Paket" : getPackageCategoryLabel(category === "other" ? "Lainnya" : category)}</h2>
+                <h2 className="mt-1 truncate text-xl font-bold">{getPackageCategoryLabel(category === "other" ? "Lainnya" : category)}</h2>
               </div>
               <span className="shrink-0 rounded-full bg-[#e6f4eb] px-3 py-1.5 text-[11px] font-bold text-[#087b45]">{filteredPackages.length} paket</span>
             </div>
@@ -441,7 +518,7 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
             {loadingBookings ? <div className="grid min-h-44 place-items-center rounded-[16px] bg-white text-[#087b45]"><LoaderCircle className="h-7 w-7 animate-spin" /></div> : bookings.length === 0 ? (
               <div className="rounded-[17px] border border-[#e3ebe5] bg-white px-6 py-12 text-center"><ClipboardList className="mx-auto h-9 w-9 text-[#93a49a]" /><p className="mt-3 text-sm font-bold">Belum ada pesanan</p><p className="mt-1 text-xs text-[#819087]">Paket yang Anda pesan akan muncul di sini.</p><button type="button" onClick={() => setView("home")} className="mt-4 rounded-[11px] bg-[#087b45] px-4 py-2.5 text-xs font-bold text-white">Jelajahi paket</button></div>
             ) : (
-              <div className="space-y-3">{bookings.map((booking) => { const eventList = Array.isArray(booking.event_details) ? booking.event_details : []; const firstEvent = eventList[0]; return <article key={booking.id} className="rounded-[16px] border border-[#e3ebe5] bg-white p-4"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-[#809087]">{getPackageCategoryLabel(booking.service_type || "Layanan")}</p><h3 className="mt-1 text-sm font-bold">{firstEvent?.eventName || "Pesanan layanan"}</h3></div><span className="shrink-0 rounded-full bg-[#fff3df] px-2.5 py-1 text-[9px] font-bold text-[#a76114]">{booking.status === "pending_payment" ? "Menunggu DP" : booking.status === "locked" ? "Terjadwal" : booking.status || "Diproses"}</span></div>{firstEvent && <div className="mt-3 space-y-1.5 border-t border-[#edf1ee] pt-3 text-[11px] text-[#718078]"><p className="flex items-center gap-2"><CalendarDays className="h-3.5 w-3.5 text-[#087b45]" />{firstEvent.date || "Tanggal belum tersedia"} {firstEvent.startTime ? `· ${firstEvent.startTime}` : ""}</p><p className="flex items-start gap-2"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#087b45]" />{firstEvent.address || "Lokasi belum tersedia"}</p></div>}</article>; })}</div>
+              <div className="space-y-3">{bookings.map((booking) => { const eventList = parseEventDetails(booking.event_details); const firstEvent = eventList[0]; return <article key={booking.id} role="button" tabIndex={0} aria-label={`Lihat detail pesanan ${booking.client_name || booking.id}`} onClick={() => setSelectedBooking(booking)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedBooking(booking); } }} className="cursor-pointer rounded-[16px] border border-[#e3ebe5] bg-white p-4 text-left transition hover:border-[#9bc9aa] hover:shadow-[0_6px_18px_rgba(24,39,31,0.07)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087b45]"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-[#809087]">{getPackageCategoryLabel(booking.service_type || "Layanan")}</p><h3 className="mt-1 text-sm font-bold">{String(firstEvent?.eventName || "Pesanan layanan")}</h3></div><span className="shrink-0 rounded-full bg-[#fff3df] px-2.5 py-1 text-[9px] font-bold text-[#a76114]">{booking.status === "pending_payment" ? "Menunggu DP" : booking.status === "locked" ? "Terjadwal" : booking.status || "Diproses"}</span></div>{firstEvent && <div className="mt-3 space-y-1.5 border-t border-[#edf1ee] pt-3 text-[11px] text-[#718078]"><p className="flex items-center gap-2"><CalendarDays className="h-3.5 w-3.5 text-[#087b45]" />{formatOrderDate(firstEvent.date)} {firstEvent.startTime || firstEvent.time ? `· ${String(firstEvent.startTime || firstEvent.time)}` : ""}</p><p className="flex items-start gap-2"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#087b45]" />{String(firstEvent.address || "Lokasi belum tersedia")}</p></div>}<p className="mt-3 border-t border-[#edf1ee] pt-3 text-[10px] font-semibold text-[#087b45]">Lihat seluruh detail pesanan <ChevronRight className="ml-1 inline h-3.5 w-3.5" /></p></article>; })}</div>
             )}
           </section>
         )}
@@ -466,6 +543,99 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
           <button type="button" onClick={() => void verifyUser("/client/profile").then((currentUser) => { if (currentUser) router.push("/client/profile"); })} className="flex flex-col items-center justify-center gap-1 text-[#8b9990]"><CircleUserRound className="h-[19px] w-[19px]" /><span className="text-[9px] font-semibold">Pengaturan profil</span></button>
         </div>
       </nav>
+
+      {selectedBooking && (
+        <div className="fixed inset-0 z-[60] overflow-y-auto bg-[#13241b]/55 p-3 backdrop-blur-sm sm:grid sm:place-items-center sm:p-5">
+          <section role="dialog" aria-modal="true" aria-labelledby="order-detail-title" className="mx-auto my-2 max-h-[92vh] w-full max-w-[620px] overflow-y-auto rounded-[20px] bg-[#f7faf8] shadow-2xl sm:my-0">
+            <header className="sticky top-0 z-10 flex items-center justify-between border-b border-[#e3ebe5] bg-white px-4 py-3.5">
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[#e6f4eb] text-[#087b45]"><FileText className="h-4 w-4" /></span>
+                <div className="min-w-0">
+                  <h2 id="order-detail-title" className="text-sm font-bold">Detail pesanan</h2>
+                  <p className="truncate text-[10px] text-[#819087]">ID {String(selectedBooking.id)}</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setSelectedBooking(null)} aria-label="Tutup detail pesanan" className="grid h-9 w-9 place-items-center rounded-full text-[#8b9990] hover:bg-[#f0f5f1]"><X className="h-5 w-5" /></button>
+            </header>
+
+            <div className="space-y-4 p-4 sm:p-5">
+              <section className="rounded-[15px] border border-[#e1e9e3] bg-white p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-[#087b45]">{getPackageCategoryLabel(selectedPackageInfo?.type || selectedBooking.service_type || "Layanan")}</p>
+                    <h3 className="mt-1 text-base font-bold">{selectedPackageInfo?.name || "Paket layanan"}</h3>
+                    {selectedPackageInfo?.description && <p className="mt-1 text-xs leading-relaxed text-[#718078]">{selectedPackageInfo.description}</p>}
+                  </div>
+                  <span className="shrink-0 rounded-full bg-[#fff3df] px-2.5 py-1 text-[9px] font-bold capitalize text-[#a76114]">{String(selectedBooking.status || "Diproses").replace(/_/g, " ")}</span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3 border-t border-[#edf1ee] pt-3 text-xs">
+                  <div><p className="text-[10px] text-[#819087]">Nama pemesan</p><p className="mt-1 font-semibold">{selectedBooking.client_name || "-"}</p></div>
+                  <div><p className="text-[10px] text-[#819087]">Nomor WhatsApp</p><p className="mt-1 font-semibold">{selectedBooking.client_phone || "-"}</p></div>
+                  <div><p className="text-[10px] text-[#819087]">Jenis acara</p><p className="mt-1 font-semibold">{selectedBooking.event_type || "-"}</p></div>
+                  <div><p className="text-[10px] text-[#819087]">Dibuat</p><p className="mt-1 font-semibold">{formatOrderDate(selectedBooking.created_at)}</p></div>
+                </div>
+                {selectedPackageInfo && parseList(selectedPackageInfo.features).length > 0 && (
+                  <div className="mt-3 border-t border-[#edf1ee] pt-3">
+                    <p className="text-[10px] font-bold text-[#819087]">Fitur paket</p>
+                    <ul className="mt-2 space-y-1 text-xs text-[#52645a]">{parseList(selectedPackageInfo.features).map((feature) => <li key={feature}>• {feature}</li>)}</ul>
+                  </div>
+                )}
+              </section>
+
+              <section>
+                <h3 className="mb-2 text-xs font-bold">Rangkaian acara ({selectedEvents.length})</h3>
+                {selectedEvents.length === 0 ? <p className="rounded-[14px] bg-white p-4 text-xs text-[#819087]">Detail acara belum tersedia.</p> : (
+                  <div className="space-y-2">
+                    {selectedEvents.map((event, index) => (
+                      <article key={String(event.id || index)} className="rounded-[14px] border border-[#e1e9e3] bg-white p-4">
+                        <p className="text-[10px] font-bold uppercase text-[#087b45]">Acara {index + 1}</p>
+                        <h4 className="mt-1 text-sm font-bold">{String(event.eventName || event.title || "Acara")}</h4>
+                        <div className="mt-2 space-y-1.5 text-xs text-[#718078]">
+                          <p className="flex items-center gap-2"><CalendarDays className="h-3.5 w-3.5 text-[#087b45]" />{formatOrderDate(event.date)}{event.startTime || event.time ? ` · ${String(event.startTime || event.time)}` : ""}</p>
+                          <p className="flex items-start gap-2"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#087b45]" />{String(event.address || "Lokasi belum tersedia")}</p>
+                          {Boolean(event.eventType) && <p>Jenis acara: {String(event.eventType)}</p>}
+                          {Boolean(event.bookerType) && <p>Status pemesan: {String(event.bookerType === "orang_lain" ? "Mewakili orang lain" : "Untuk sendiri")}</p>}
+                          {Boolean(event.brideName) && <p>Nama wanita: {String(event.brideName)}</p>}
+                          {Boolean(event.groomName) && <p>Nama pria: {String(event.groomName)}</p>}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
+
+              {selectedBooking.notes && <section className="rounded-[14px] border border-[#e1e9e3] bg-white p-4"><h3 className="text-xs font-bold">Catatan pesanan</h3><p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-[#718078]">{typeof selectedBooking.notes === "string" ? selectedBooking.notes : JSON.stringify(selectedBooking.notes, null, 2)}</p></section>}
+
+              <section className="rounded-[15px] border border-[#dce9df] bg-white p-4">
+                <h3 className="flex items-center gap-2 text-xs font-bold"><CreditCard className="h-4 w-4 text-[#087b45]" />Rincian pembayaran</h3>
+                {selectedInvoice ? (
+                  <div className="mt-3 space-y-2 text-xs">
+                    <div className="flex justify-between gap-3 text-[#718078]"><span>Total pesanan</span><strong className="text-[#18271f]">{formatRupiah(Number(selectedInvoice.total_amount || 0))}</strong></div>
+                    <div className="flex justify-between gap-3 text-[#718078]"><span>DP minimum</span><strong className="text-[#18271f]">{formatRupiah(Number(selectedInvoice.dp_amount || Number(selectedInvoice.total_amount || 0) * 0.5))}</strong></div>
+                    <div className="flex justify-between gap-3 text-[#718078]"><span>Sudah dibayar</span><strong className="text-[#087b45]">{formatRupiah(Number(selectedInvoice.paid_amount || 0))}</strong></div>
+                    <div className="flex justify-between gap-3 border-t border-[#edf1ee] pt-2 font-bold"><span>Sisa pembayaran</span><span>{formatRupiah(Math.max(Number(selectedInvoice.total_amount || 0) - Number(selectedInvoice.paid_amount || 0), 0))}</span></div>
+                  </div>
+                ) : <p className="mt-2 text-xs text-[#819087]">Rincian invoice belum tersedia.</p>}
+              </section>
+
+              {needsDownPayment && (
+                <section className="rounded-[15px] border border-[#f1d8a9] bg-[#fff8e9] p-4">
+                  <h3 className="text-sm font-bold text-[#7b4d14]">Instruksi pembayaran DP</h3>
+                  <p className="mt-1 text-xs text-[#8b6737]">Silakan bayar DP sebesar <strong>{formatRupiah(remainingDownPayment)}</strong>, lalu konfirmasi melalui WhatsApp.</p>
+                  <div className="mt-3 space-y-2 rounded-[12px] border border-[#f1e4c9] bg-white p-3 text-xs text-[#52645a]">
+                    <p className="font-bold">Transfer bank / e-wallet · a.n. Guntur Bayu Jantoro</p>
+                    <p>BCA: 8435901499</p>
+                    <p>SeaBank: 901760387739</p>
+                    <p>DANA: 081226216862</p>
+                    <p className="border-t border-[#edf1ee] pt-2">Tunai: bayar langsung di Galeri Maeng Studio, Jl. Kapten Robani Kadir LRG Maeng No 06 RT 016 RW 004 Kel. Talangputri, Kec. Plaju.</p>
+                  </div>
+                  <a href={`https://wa.me/628117873878?text=${encodeURIComponent(`Halo Maeng Studio, saya sudah membayar DP untuk pesanan ${String(selectedBooking.id)}.`)}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex h-10 items-center justify-center rounded-[10px] bg-[#087b45] px-4 text-xs font-bold text-white">Konfirmasi via WhatsApp</a>
+                </section>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
 
       {notice && !selectedPackage && <div role="status" className="fixed bottom-[78px] left-1/2 z-50 -translate-x-1/2 rounded-[12px] bg-[#183a29] px-4 py-3 text-center text-xs font-semibold text-white shadow-xl">{notice}</div>}
 

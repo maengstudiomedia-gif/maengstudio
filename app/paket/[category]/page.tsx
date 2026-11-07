@@ -8,8 +8,14 @@ export default async function PackageCategoryPage({
   params: Promise<{ category: string }>;
 }) {
   const { category } = await params;
-  const normalizedCategory = category.toLowerCase();
-  const isCategory = normalizedCategory === "all" || PACKAGE_CATEGORIES.some((item) => item.value === normalizedCategory);
+  let decodedCategory = category;
+  try {
+    decodedCategory = decodeURIComponent(category);
+  } catch {
+    decodedCategory = category;
+  }
+  const normalizedCategory = decodedCategory.toLowerCase().replace(/-/g, " ");
+  const isCategory = PACKAGE_CATEGORIES.some((item) => item.value === normalizedCategory);
 
   if (!isCategory && normalizedCategory !== "other") notFound();
 

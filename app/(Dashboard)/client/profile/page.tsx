@@ -1,5 +1,5 @@
-import MobileHomeApp from "@/app/components/MobileHomeApp";
+import { redirect } from "next/navigation";
 
-export default function ClientDashboard() {
-  return <MobileHomeApp />;
+export default function ClientProfilePage() {
+  redirect("/");
 }
