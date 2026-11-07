@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { getPublicPackages, getClientShowcase } from "@/app/actions/publicActions";
 import PublicBookingCalendarSection from "@/app/components/bookingCalendar/PublicBookingCalendarSection";
+import MobileHomeApp from "@/app/components/MobileHomeApp";
 import { PACKAGE_CATEGORIES, getPackageCategoryLabel } from "@/lib/package-categories";
 
 // Fungsi Helper Format Rupiah
@@ -41,7 +42,7 @@ function groupPackagesByCategory(packages: any[]) {
     : groups;
 }
 
-export default function LandingPage() {
+function LandingPageLegacy() {
   const [packages, setPackages] = useState<any[]>([]);
   const [clients, setClients] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -343,4 +344,8 @@ export default function LandingPage() {
 
     </div>
   );
+}
+
+export default function LandingPage() {
+  return <MobileHomeApp />;
 }

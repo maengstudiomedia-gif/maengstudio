@@ -55,11 +55,28 @@ export async function createNewBookingAction(payload: any) {
   if (!user) return { success: false, message: "Sesi tidak valid. Silakan login ulang." };
 
   // Ekstrak data yang dikirim dari form komponen (TabNewBooking)
-  const { packageId, events, notes, totalPrice, dpAmount } = payload;
+  const { packageId, events, notes } = payload;
 
   if (!events || events.length === 0) {
      return { success: false, message: "Minimal harus ada satu rangkaian acara." };
   }
+
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+  const { data: selectedPackage, error: packageError } = await supabaseAdmin
+    .from("packages")
+    .select("price")
+    .eq("id", packageId)
+    .maybeSingle();
+
+  if (packageError || !selectedPackage) {
+    return { success: false, message: "Paket tidak ditemukan. Silakan pilih paket yang tersedia." };
+  }
+
+  const totalPrice = Number(selectedPackage.price || 0);
+  const dpAmount = totalPrice * 0.5;
 
   const dateKeys = extractDateKeysFromEventDetails(events);
   const cap = await validateBookingEventDatesAction({ dateKeys, excludeBookingId: null });
@@ -74,6 +91,9 @@ export async function createNewBookingAction(payload: any) {
       user_id: user.id,
       package_id: packageId, // Simpan ID paket dari katalog 
       service_type: 'custom_package', // Fallback agar tidak ditolak check constraint database
+      client_name: String(payload.clientName || user.user_metadata?.full_name || user.user_metadata?.name || "Klien").trim(),
+      client_phone: String(payload.clientPhone || user.phone || "").trim() || null,
+      event_type: String(payload.eventType || events[0]?.eventType || "Lainnya"),
       event_details: events,
       notes: notes,
       status: 'pending_payment'

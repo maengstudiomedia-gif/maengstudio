@@ -38,25 +38,25 @@ export default function PublicBookingCalendarSection() {
   const label = new Date(cursor.y, cursor.m, 1).toLocaleDateString("id-ID", { month: "long", year: "numeric" });
 
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/[0.02] p-6 md:p-8">
+    <div className="rounded-[18px] border border-[#e3ebe5] bg-white p-3.5 shadow-[0_4px_12px_rgba(24,39,31,0.035)] sm:p-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h3 className="text-xl font-bold text-white">Kalender ketersediaan</h3>
-          <p className="text-sm text-white/45 mt-1">Maksimal 2 pesanan per tanggal acara. Angka menunjukkan slot terpakai.</p>
+          <h3 className="text-[15px] font-bold text-[#18271f]">Kalender ketersediaan</h3>
+          <p className="text-[10px] text-[#819087] mt-1">Maksimal 2 pesanan per tanggal. Angka menunjukkan slot terpakai.</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
-            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white"
+            className="p-2 rounded-[10px] bg-[#f1f6f2] hover:bg-[#e6f1e9] text-[#087b45]"
             onClick={() => setCursor((c) => (c.m === 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m: c.m - 1 }))}
             aria-label="Bulan sebelumnya"
           >
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <span className="text-sm font-medium text-white/80 min-w-[140px] text-center capitalize">{label}</span>
+          <span className="text-xs font-semibold text-[#34453b] min-w-[120px] text-center capitalize">{label}</span>
           <button
             type="button"
-            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white"
+            className="p-2 rounded-[10px] bg-[#f1f6f2] hover:bg-[#e6f1e9] text-[#087b45]"
             onClick={() => setCursor((c) => (c.m === 11 ? { y: c.y + 1, m: 0 } : { y: c.y, m: c.m + 1 }))}
             aria-label="Bulan berikutnya"
           >
@@ -66,17 +66,17 @@ export default function PublicBookingCalendarSection() {
       </div>
       {loading ? (
         <div className="flex justify-center py-16">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+          <Loader2 className="w-7 h-7 animate-spin text-[#087b45]" />
         </div>
       ) : (
-        <BookingMonthGrid year={cursor.y} month={cursor.m} byDate={byDate} showClientNames={false} />
+        <BookingMonthGrid year={cursor.y} month={cursor.m} byDate={byDate} showClientNames={false} tone="light" />
       )}
-      <div className="mt-6 flex flex-wrap gap-4 text-xs text-white/50">
+      <div className="mt-3 flex flex-wrap gap-4 text-[10px] text-[#718078]">
         <span className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded bg-emerald-500/30 border border-emerald-500/40" /> Ada slot
+          <span className="w-3 h-3 rounded bg-emerald-100 border border-emerald-300" /> Ada slot
         </span>
         <span className="flex items-center gap-2">
-          <span className="w-3 h-3 rounded bg-rose-500/30 border border-rose-500/50 ring-1 ring-rose-500/40" /> Penuh (2/2)
+          <span className="w-3 h-3 rounded bg-rose-100 border border-rose-300" /> Penuh (2/2)
         </span>
       </div>
     </div>

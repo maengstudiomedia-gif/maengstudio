@@ -12,6 +12,16 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const errorParam = searchParams.get("error");
+  const requestedNextPath = searchParams.get("next");
+
+  const getRedirectPath = (role: string | undefined, defaultPath: string) => {
+    const isLocalPath = Boolean(
+      requestedNextPath?.startsWith("/") &&
+      !requestedNextPath.startsWith("//") &&
+      !requestedNextPath.includes("\\")
+    );
+    return role !== "admin" && role !== "sales" && isLocalPath ? requestedNextPath! : defaultPath;
+  };
   
   // PENENTU APAKAH HALAMAN INI HARUS JADI FORM GANTI PERANGKAT
   const isDeviceMismatch = errorParam === "device_mismatch";
@@ -123,7 +133,8 @@ function LoginContent() {
       setIsSuccess(true);
       setIsLoading(false);
       
-      const targetPath = res.role === "admin" ? "/admin/dashboard" : res.role === "sales" ? "/sales" : "/client/profile";
+      const defaultPath = res.role === "admin" ? "/admin/dashboard" : res.role === "sales" ? "/sales" : "/client/profile";
+      const targetPath = getRedirectPath(res.role, defaultPath);
       redirectTimeoutRef.current = setTimeout(() => { router.replace(targetPath); router.refresh(); }, 1200);
     } else {
       showAlert(res.error || "Gagal memverifikasi akun. Email atau password salah.", "error");
@@ -158,7 +169,8 @@ function LoginContent() {
       } else {
         setIsSuccess(true); 
         setIsLoading(false);
-        const targetPath = result.redirectTo || (result.role === "admin" ? "/admin/dashboard" : result.role === "sales" ? "/sales" : "/client/profile");
+        const defaultPath = result.redirectTo || (result.role === "admin" ? "/admin/dashboard" : result.role === "sales" ? "/sales" : "/client/profile");
+        const targetPath = getRedirectPath(result.role, defaultPath);
         redirectTimeoutRef.current = setTimeout(() => { router.replace(targetPath); router.refresh(); }, 1200);
         redirectFallbackRef.current = setTimeout(() => { window.location.href = targetPath; }, 3000);
       }
