@@ -133,7 +133,7 @@ function LoginContent() {
       setIsSuccess(true);
       setIsLoading(false);
       
-      const defaultPath = res.role === "admin" ? "/admin/dashboard" : res.role === "sales" ? "/sales" : "/client/profile";
+      const defaultPath = res.role === "admin" ? "/admin/dashboard" : res.role === "sales" ? "/sales" : "/";
       const targetPath = getRedirectPath(res.role, defaultPath);
       redirectTimeoutRef.current = setTimeout(() => { router.replace(targetPath); router.refresh(); }, 1200);
     } else {
@@ -169,7 +169,7 @@ function LoginContent() {
       } else {
         setIsSuccess(true); 
         setIsLoading(false);
-        const defaultPath = result.redirectTo || (result.role === "admin" ? "/admin/dashboard" : result.role === "sales" ? "/sales" : "/client/profile");
+        const defaultPath = result.redirectTo || (result.role === "admin" ? "/admin/dashboard" : result.role === "sales" ? "/sales" : "/");
         const targetPath = getRedirectPath(result.role, defaultPath);
         redirectTimeoutRef.current = setTimeout(() => { router.replace(targetPath); router.refresh(); }, 1200);
         redirectFallbackRef.current = setTimeout(() => { window.location.href = targetPath; }, 3000);

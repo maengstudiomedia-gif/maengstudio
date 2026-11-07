@@ -44,7 +44,23 @@ export async function getClientDashboardData() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
-  return { success: true, user, bookings: bookings || [], invoices: invoices || [] };
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+  const { data: profile } = await supabaseAdmin
+    .from('profiles')
+    .select('balance')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  return {
+    success: true,
+    user,
+    bookings: bookings || [],
+    invoices: invoices || [],
+    balance: Number(profile?.balance || 0),
+  };
 }
 
 // 2. Fungsi Membuat Pesanan Baru & Otomatisasi Tagihan
