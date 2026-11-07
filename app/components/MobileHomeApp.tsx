@@ -626,7 +626,7 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
                     <p className="font-bold">Transfer bank / e-wallet · a.n. Guntur Bayu Jantoro</p>
                     <p>BCA: 8435901499</p>
                     <p>SeaBank: 901760387739</p>
-                    <p>DANA: 081226216862</p>
+                    <p>DANA: 08117873878</p>
                     <p className="border-t border-[#edf1ee] pt-2">Tunai: bayar langsung di Galeri Maeng Studio, Jl. Kapten Robani Kadir LRG Maeng No 06 RT 016 RW 004 Kel. Talangputri, Kec. Plaju.</p>
                   </div>
                   <a href={`https://wa.me/628117873878?text=${encodeURIComponent(`Halo Maeng Studio, saya sudah membayar DP untuk pesanan ${String(selectedBooking.id)}.`)}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex h-10 items-center justify-center rounded-[10px] bg-[#087b45] px-4 text-xs font-bold text-white">Konfirmasi via WhatsApp</a>

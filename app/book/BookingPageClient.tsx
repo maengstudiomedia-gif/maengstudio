@@ -547,7 +547,7 @@ export default function BookingPageClient({
                 <p className="text-white/80 font-medium">Transfer Bank / E-wallet</p>
                 <p className="text-white/60 text-xs">BCA: 8435901499 a.n. Guntur Bayu Jantoro</p>
                 <p className="text-white/60 text-xs">SeaBank: 901760387739 a.n. Guntur Bayu Jantoro</p>
-                <p className="text-white/60 text-xs">DANA: 081226216862 a.n. Guntur Bayu Jantoro</p>
+                <p className="text-white/60 text-xs">DANA: 08117873878 a.n. Guntur Bayu Jantoro</p>
                 <p className="text-white/60 text-xs">Setelah transfer, konfirmasi WA agar admin segera memproses pesanan Anda.</p>
               </div>
               <div className="rounded-3xl bg-white/5 border border-white/10 p-4 text-sm space-y-3">
