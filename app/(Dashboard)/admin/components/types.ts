@@ -15,6 +15,9 @@ export type InvoiceRow = {
   dp_amount?: number;
   paid_amount?: number;
   payment_status?: string;
+  payment_plan?: "dp" | "full";
+  payment_method?: "cash" | "transfer";
+  transfer_code?: number | null;
 };
 
 export type BookingRow = {

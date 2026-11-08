@@ -19,6 +19,7 @@ import ProcessPickupModal from "./ProcessPickupModal";
 import ThermalReceiptPrintModal from "./ThermalReceiptPrintModal";
 
 import { formatRupiah } from "./utils";
+import { calculateInitialPaymentAmount } from "@/lib/transfer-payment";
 import type { BookingRow } from "./types";
 
 export default function AdminBookingsTable() {
@@ -132,7 +133,12 @@ export default function AdminBookingsTable() {
             onEdit={(row) => setEditing({ ...row })}
             onDelete={handleDelete}
             onPayDp={(row) => {
-              setDpPaymentTarget({ row, defaultAmount: "" });
+              const total = Number(row.invoice?.total_amount || 0);
+              const dpAmount = Number(row.invoice?.dp_amount || total * 0.5);
+              const paymentMethod = row.invoice?.payment_method === "cash" ? "cash" : "transfer";
+              const transferCode = paymentMethod === "transfer" ? Number(row.invoice?.transfer_code || 0) : 0;
+              const defaultAmount = calculateInitialPaymentAmount(total, dpAmount, "dp", paymentMethod, transferCode);
+              setDpPaymentTarget({ row, defaultAmount: String(defaultAmount) });
             }}
             // FUNGSI BARU UNTUK EDIT DP
             onEditDp={(row) => {
@@ -142,7 +148,11 @@ export default function AdminBookingsTable() {
             onPayLunas={(row) => {
               const total = Number(row.invoice?.total_amount || 0);
               const paid = Number(row.invoice?.paid_amount || 0);
-              const sisaTagihan = Math.max(total - paid, 0);
+              const transferCode = row.invoice?.payment_method === "transfer" ? Number(row.invoice?.transfer_code || 0) : 0;
+              const sisaTagihan = Math.max(
+                total + (row.invoice?.payment_plan === "full" ? transferCode : 0) - paid,
+                0
+              );
 
               showConfirm(
                 `Sisa Tagihan: ${formatRupiah(sisaTagihan)}\n\nApakah benar klien membayar sebesar ${formatRupiah(sisaTagihan)} untuk pelunasan?`,

@@ -1,5 +1,6 @@
 import { Pencil, Trash2, Printer, CheckCircle2, Upload, Factory } from "lucide-react";
 import { formatRupiah, parseEventDetails } from "./utils";
+import { calculateInitialPaymentAmount } from "@/lib/transfer-payment";
 import type { BookingRow } from "./types";
 
 type BookingTableProps = {
@@ -57,6 +58,14 @@ export default function BookingTable({
         {bookings.map((row) => {
           const invoice = row.invoice || {};
           const total = Number(invoice.total_amount || 0);
+          const transferCode = invoice.payment_method === "transfer" ? Number(invoice.transfer_code || 0) : 0;
+          const initialPayment = calculateInitialPaymentAmount(
+            total,
+            Number(invoice.dp_amount || total * 0.5),
+            invoice.payment_plan === "full" ? "full" : "dp",
+            invoice.payment_method === "cash" ? "cash" : "transfer",
+            transferCode
+          );
 
           const paid = Number(invoice.paid_amount || 0);
           const remaining = Math.max(total - paid, 0);
@@ -125,7 +134,7 @@ export default function BookingTable({
                 )}
               </td>
 
-              <td className="px-4 py-3 font-bold text-white">{formatRupiah(total)}</td>
+              <td className="px-4 py-3 font-bold text-white"><p>{formatRupiah(total)}</p>{transferCode > 0 && <p className="mt-1 text-[10px] font-medium text-cyan-300">Kode transfer {String(transferCode).padStart(3, "0")} · Awal {formatRupiah(initialPayment)}</p>}</td>
               <td className="px-4 py-3 text-white/80">{formatRupiah(paid)}</td>
               <td className="px-4 py-3 text-amber-400 font-bold">{formatRupiah(remaining)}</td>
 

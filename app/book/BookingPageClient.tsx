@@ -5,7 +5,9 @@ import { createPublicBookingAction } from "@/app/actions/booking";
 import { getPublicPackages } from "@/app/actions/publicActions";
 import { PACKAGE_CATEGORIES, getPackageCategoryLabel } from "@/lib/package-categories";
 import { calculatePackageTotal, MAX_BOOKING_EVENT_DAYS } from "@/lib/package-event-pricing";
+import { calculateExpectedSettlement, calculateInitialPaymentAmount } from "@/lib/transfer-payment";
 import { getPackagePriceUnit } from "@/lib/package-price";
+import PaymentAccounts from "@/app/components/PaymentAccounts";
 import {
   Loader2,
   ArrowRight,
@@ -64,6 +66,7 @@ export default function BookingPageClient({
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer">("transfer");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [paymentSummary, setPaymentSummary] = useState<{ amount: number; transferCode: number | null; settlementAmount: number } | null>(null);
 
   useEffect(() => {
     setName(initialName);
@@ -193,6 +196,7 @@ export default function BookingPageClient({
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setMessage(null);
+    setPaymentSummary(null);
 
     if (!validateForm()) return;
     if (!selectedPackage) return;
@@ -211,6 +215,7 @@ export default function BookingPageClient({
 
       const result = await createPublicBookingAction(payload as any);
       if (result.success) {
+        setPaymentSummary(result.payment || null);
         setMessage({
           type: "success",
           text:
@@ -271,6 +276,14 @@ export default function BookingPageClient({
           >
             {message.text}
           </div>
+        )}
+        {message?.type === "success" && paymentSummary && (
+          <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 text-sm text-white/75">
+            <h2 className="font-semibold text-white">Nominal pembayaran awal</h2>
+            <p className="mt-2 text-2xl font-bold text-amber-300">{formatRupiah(paymentSummary.amount)}</p>
+            {paymentSummary.transferCode !== null && <p className="mt-2">Kode pembeda transfer: <strong className="text-white">{String(paymentSummary.transferCode).padStart(3, "0")}</strong></p>}
+            {paymentPlan === "dp" && <p className="mt-1 text-xs text-white/55">Sisa pelunasan setelah DP: {formatRupiah(paymentSummary.settlementAmount)}</p>}
+          </section>
         )}
 
         <form onSubmit={handleSubmit} className="grid gap-8 lg:grid-cols-[1.35fr_0.65fr]">
@@ -594,12 +607,8 @@ export default function BookingPageClient({
                 </div>
               </fieldset>
               {paymentMethod === "transfer" ? (
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm space-y-2">
-                  <p className="font-medium text-white/80">Transfer Bank / E-wallet · a.n. Guntur Bayu Jantoro</p>
-                  <p className="text-xs text-white/60">BCA: 8435901499</p>
-                  <p className="text-xs text-white/60">SeaBank: 901760387739</p>
-                  <p className="text-xs text-white/60">DANA: 08117873878</p>
-                  <p className="border-t border-white/10 pt-2 text-xs text-white/60">Setelah transfer, konfirmasi melalui WhatsApp.</p>
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <PaymentAccounts theme="dark" showConfirmation />
                 </div>
               ) : (
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm space-y-2">

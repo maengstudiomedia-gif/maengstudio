@@ -5,7 +5,47 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { extractDateKeysFromEventDetails } from "@/lib/bookingCalendar/extractDateKeysFromEventDetails";
 import { calculatePackageTotal, MAX_BOOKING_EVENT_DAYS } from "@/lib/package-event-pricing";
+import { calculateExpectedSettlement, calculateInitialPaymentAmount } from "@/lib/transfer-payment";
 import { validateBookingEventDatesAction, revalidateBookingCalendarPaths } from "@/app/actions/bookingCalendarActions";
+
+async function insertInvoiceWithTransferCode(supabaseAdmin: any, invoice: Record<string, unknown>, maxCode: number) {
+  if (invoice.payment_method !== "transfer") {
+    const { error } = await supabaseAdmin.from("invoices").insert({ ...invoice, transfer_code: null });
+    return { error, transferCode: 0 };
+  }
+
+  const codeLimit = Math.min(999, Math.ceil(maxCode) - 1);
+  if (codeLimit < 1) {
+    return { error: { message: "Harga paket terlalu kecil untuk membuat kode transfer tiga digit." }, transferCode: 0 };
+  }
+
+  const { data: activeInvoices, error: lookupError } = await supabaseAdmin
+    .from("invoices")
+    .select("transfer_code")
+    .eq("payment_method", "transfer")
+    .eq("payment_status", "unpaid")
+    .not("transfer_code", "is", null);
+  if (lookupError) return { error: lookupError, transferCode: 0 };
+
+  const usedCodes = new Set((activeInvoices || []).map((item: { transfer_code: number }) => Number(item.transfer_code)));
+  for (let attempt = 0; attempt < codeLimit; attempt += 1) {
+    const availableCodes = Array.from({ length: codeLimit }, (_, index) => index + 1)
+      .filter((code) => !usedCodes.has(code));
+    if (availableCodes.length === 0) {
+      return { error: { message: "Semua kode transfer sedang digunakan. Silakan coba beberapa saat lagi." }, transferCode: 0 };
+    }
+
+    const transferCode = availableCodes[Math.floor(Math.random() * availableCodes.length)];
+    const { error } = await supabaseAdmin
+      .from("invoices")
+      .insert({ ...invoice, transfer_code: transferCode });
+    if (!error) return { error: null, transferCode };
+    if (error.code !== "23505") return { error, transferCode: 0 };
+    usedCodes.add(transferCode);
+  }
+
+  return { error: { message: "Gagal membuat kode transfer unik. Silakan coba lagi." }, transferCode: 0 };
+}
 
 // Helper untuk inisialisasi Supabase di sisi Server (Memastikan RLS berjalan aman)
 async function getSupabase() {
@@ -130,9 +170,7 @@ export async function createNewBookingAction(payload: any) {
   if (!booking) return { success: false, message: "Kesalahan sistem: ID Pesanan gagal diambil." };
 
   // -- B. Buat Tagihan (Invoice) Terkait --
-  const { error: invoiceError } = await supabase
-    .from('invoices')
-    .insert([{
+  const invoiceResult = await insertInvoiceWithTransferCode(supabaseAdmin, {
       booking_id: booking.id,
       user_id: user.id,
       total_amount: totalPrice,
@@ -141,12 +179,25 @@ export async function createNewBookingAction(payload: any) {
       payment_plan: paymentPlan,
       payment_method: paymentMethod,
       payment_status: 'unpaid'
-    }]);
+    }, paymentPlan === "dp" ? totalPrice - dpAmount : 1000);
 
-  if (invoiceError) return { success: false, message: "Gagal membuat tagihan: " + invoiceError.message };
+  if (invoiceResult.error) {
+    await supabaseAdmin.from("bookings").delete().eq("id", booking.id);
+    return { success: false, message: "Gagal membuat tagihan: " + invoiceResult.error.message };
+  }
 
   revalidateBookingCalendarPaths();
-  return { success: true, message: "Pesanan dan Invois berhasil dibuat!" };
+  return {
+    success: true,
+    message: "Pesanan dan Invois berhasil dibuat!",
+    payment: {
+      amount: calculateInitialPaymentAmount(totalPrice, dpAmount, paymentPlan, paymentMethod, invoiceResult.transferCode),
+      transferCode: paymentMethod === "transfer" ? invoiceResult.transferCode : null,
+      settlementAmount: paymentPlan === "dp" && paymentMethod === "transfer"
+        ? calculateExpectedSettlement(totalPrice, dpAmount, invoiceResult.transferCode)
+        : paymentPlan === "dp" ? totalPrice - dpAmount : 0,
+    },
+  };
 }
 
 // 3. Fungsi booking publik tanpa login
@@ -210,9 +261,7 @@ export async function createPublicBookingAction(payload: any) {
   if (bookingError) return { success: false, message: "Gagal membuat pesanan publik: " + bookingError.message };
   if (!booking) return { success: false, message: "Kesalahan sistem: booking publik gagal dibuat." };
 
-  const { error: invoiceError } = await supabaseAdmin
-    .from('invoices')
-    .insert([{
+  const invoiceResult = await insertInvoiceWithTransferCode(supabaseAdmin, {
       booking_id: booking.id,
       user_id: publicBookingUserId,
       total_amount: totalPrice,
@@ -221,16 +270,23 @@ export async function createPublicBookingAction(payload: any) {
       payment_plan: paymentPlan,
       payment_method: paymentMethod,
       payment_status: 'unpaid'
-    }]);
+    }, paymentPlan === "dp" ? totalPrice - dpAmount : 1000);
 
-  if (invoiceError) {
+  if (invoiceResult.error) {
     await supabaseAdmin.from('bookings').delete().eq('id', booking.id).then();
-    return { success: false, message: "Gagal membuat tagihan: " + invoiceError.message };
+    return { success: false, message: "Gagal membuat tagihan: " + invoiceResult.error.message };
   }
 
   revalidateBookingCalendarPaths();
   return {
     success: true,
-    message: "Booking berhasil terkirim. Silakan ikuti instruksi pembayaran sesuai pilihan Anda."
+    message: "Booking berhasil terkirim. Silakan ikuti instruksi pembayaran sesuai pilihan Anda.",
+    payment: {
+      amount: calculateInitialPaymentAmount(totalPrice, dpAmount, paymentPlan, paymentMethod, invoiceResult.transferCode),
+      transferCode: paymentMethod === "transfer" ? invoiceResult.transferCode : null,
+      settlementAmount: paymentPlan === "dp" && paymentMethod === "transfer"
+        ? calculateExpectedSettlement(totalPrice, dpAmount, invoiceResult.transferCode)
+        : paymentPlan === "dp" ? totalPrice - dpAmount : 0,
+    },
   };
 }
