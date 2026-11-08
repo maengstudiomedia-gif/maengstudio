@@ -111,10 +111,11 @@ function parseEventDetails(value: unknown): Record<string, unknown>[] {
 function getCustomerNoteText(value: unknown): string {
   let notes = value;
   if (typeof notes === "string") {
+    const rawNotes = notes;
     try {
-      notes = JSON.parse(notes) as unknown;
+      notes = JSON.parse(rawNotes) as unknown;
     } catch {
-      return notes.trim();
+      return rawNotes.trim();
     }
   }
   if (typeof notes === "string") return notes.trim();
