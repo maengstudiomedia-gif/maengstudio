@@ -144,37 +144,30 @@ export function parseProcessMeta(notes: unknown): BookingProcessMeta {
   };
 }
 
-export function mergeProcessMetaAsNotes(existingNotes: unknown, process: BookingProcessMeta): string {
-  let base: Record<string, unknown> = {};
-  if (existingNotes && typeof existingNotes === "string") {
+function parseNotesBase(existingNotes: unknown): Record<string, unknown> {
+  if (typeof existingNotes === "string") {
     try {
       const parsed = JSON.parse(existingNotes) as unknown;
-      if (parsed && typeof parsed === "object") base = parsed as Record<string, unknown>;
-    } catch {}
-  } else if (existingNotes && typeof existingNotes === "object") {
-    base = existingNotes as Record<string, unknown>;
-  function parseNotesBase(existingNotes: unknown): Record<string, unknown> {
-    if (typeof existingNotes === "string") {
-      try {
-        const parsed = JSON.parse(existingNotes) as unknown;
-        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-          return parsed as Record<string, unknown>;
-        }
-        if (typeof parsed === "string" && parsed.trim()) return { customer_notes: parsed };
-      } catch {
-        if (existingNotes.trim()) return { customer_notes: existingNotes };
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
       }
-    } else if (existingNotes && typeof existingNotes === "object" && !Array.isArray(existingNotes)) {
-      return existingNotes as Record<string, unknown>;
+      if (typeof parsed === "string" && parsed.trim()) return { customer_notes: parsed };
+    } catch {
+      if (existingNotes.trim()) return { customer_notes: existingNotes };
     }
-    return {};
+  } else if (existingNotes && typeof existingNotes === "object" && !Array.isArray(existingNotes)) {
+    return existingNotes as Record<string, unknown>;
   }
+  return {};
+}
 
-  }
-    const base = parseNotesBase(existingNotes);
-      if (parsed && typeof parsed === "object") base = parsed as Record<string, unknown>;
-    } catch {}
-  } else if (existingNotes && typeof existingNotes === "object") {
-    base = existingNotes as Record<string, unknown>;
-  }
-    const base = parseNotesBase(existingNotes);
+export function mergeProcessMetaAsNotes(existingNotes: unknown, process: BookingProcessMeta): string {
+  const base = parseNotesBase(existingNotes);
+  return JSON.stringify({ ...base, process });
+}
+
+/** Gabung field notes metadata tanpa menghapus process atau catatan pelanggan. */
+export function mergeBookingNotesPatch(existingNotes: unknown, patch: Record<string, unknown>): string {
+  const base = parseNotesBase(existingNotes);
+  return JSON.stringify({ ...base, ...patch });
+}
