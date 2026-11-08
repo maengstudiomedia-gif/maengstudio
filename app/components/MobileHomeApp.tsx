@@ -33,6 +33,8 @@ import { createNewBookingAction, getClientDashboardData } from "@/app/actions/bo
 import { getPublicPackages } from "@/app/actions/publicActions";
 import PublicBookingCalendarSection from "@/app/components/bookingCalendar/PublicBookingCalendarSection";
 import { PACKAGE_CATEGORIES, getPackageCategoryLabel } from "@/lib/package-categories";
+import { getPackagePriceUnit } from "@/lib/package-price";
+import { calculatePackageTotal, MAX_BOOKING_EVENT_DAYS } from "@/lib/package-event-pricing";
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -52,6 +54,9 @@ type PackageItem = {
   name: string;
   type: string;
   price: number;
+  price_unit?: string | null;
+  allow_extra_days?: boolean | null;
+  extra_day_price?: number | string | null;
   description?: string | null;
   image?: string | null;
   image_url?: string | null;
@@ -103,6 +108,23 @@ function parseEventDetails(value: unknown): Record<string, unknown>[] {
   return parsed && typeof parsed === "object" ? [parsed as Record<string, unknown>] : [];
 }
 
+function getCustomerNoteText(value: unknown): string {
+  let notes = value;
+  if (typeof notes === "string") {
+    try {
+      notes = JSON.parse(notes) as unknown;
+    } catch {
+      return notes.trim();
+    }
+  }
+  if (typeof notes === "string") return notes.trim();
+  if (!notes || typeof notes !== "object" || Array.isArray(notes)) return "";
+
+  const record = notes as Record<string, unknown>;
+  const customerNote = record.customer_notes ?? record.customerNote ?? record.note ?? record.notes;
+  return typeof customerNote === "string" ? customerNote.trim() : "";
+}
+
 function formatOrderDate(value: unknown) {
   if (!value) return "-";
   const date = new Date(String(value));
@@ -138,6 +160,8 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
   const [bookerType, setBookerType] = useState("sendiri");
   const [brideName, setBrideName] = useState("");
   const [groomName, setGroomName] = useState("");
+  const [paymentPlan, setPaymentPlan] = useState<"dp" | "full">("dp");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer">("transfer");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notice, setNotice] = useState("");
   const [pendingPackageId, setPendingPackageId] = useState("");
@@ -219,6 +243,11 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
     () => cartIds.map((id) => packages.find((item) => String(item.id) === id)).filter(Boolean) as PackageItem[],
     [cartIds, packages]
   );
+  const selectedPackageAllowsExtraDays = selectedPackage?.allow_extra_days !== false;
+  const selectedExtraDayPrice = Number(selectedPackage?.extra_day_price || 0);
+  const selectedPackageTotal = selectedPackage
+    ? calculatePackageTotal(selectedPackage.price, selectedExtraDayPrice, events.length, selectedPackageAllowsExtraDays)
+    : 0;
 
   const bannerImage = packages.find((item) => item.image_url || item.image)?.image_url
     || packages.find((item) => item.image)?.image
@@ -244,6 +273,8 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
     const currentUser = await verifyUser(nextPath);
     if (!currentUser) return;
     setSelectedPackage(item);
+    setPaymentPlan("dp");
+    setPaymentMethod("transfer");
     setClientName(String(currentUser.user_metadata?.full_name || currentUser.user_metadata?.name || ""));
     setClientPhone(String(currentUser.user_metadata?.phone || currentUser.phone || ""));
     setEvents([newEvent()]);
@@ -363,8 +394,8 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
         groomName: eventType === "Pernikahan" && bookerType === "orang_lain" ? groomName : "",
       })),
       notes,
-      totalPrice: Number(selectedPackage.price || 0),
-      dpAmount: Number(selectedPackage.price || 0) * 0.5,
+      paymentPlan,
+      paymentMethod,
       clientName,
       clientPhone,
       eventType: eventType === "Lainnya" ? customEventType.trim() : eventType,
@@ -401,11 +432,17 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
     ? packages.find((item) => String(item.id) === String(selectedBooking.package_id))
     : null;
   const selectedEvents = selectedBooking ? parseEventDetails(selectedBooking.event_details) : [];
-  const needsDownPayment = selectedBooking?.status === "pending_payment" || selectedInvoice?.payment_status === "unpaid";
-  const remainingDownPayment = Math.max(
-    Number(selectedInvoice?.dp_amount || Number(selectedInvoice?.total_amount || 0) * 0.5) - Number(selectedInvoice?.paid_amount || 0),
-    0
-  );
+  const customerNote = getCustomerNoteText(selectedBooking?.notes);
+  const invoiceTotal = Number(selectedInvoice?.total_amount || 0);
+  const invoicePaid = Number(selectedInvoice?.paid_amount || 0);
+  const initialPaymentTarget = selectedInvoice?.payment_plan === "full"
+    ? invoiceTotal
+    : Number(selectedInvoice?.dp_amount || invoiceTotal * 0.5);
+  const remainingInitialPayment = Math.max(initialPaymentTarget - invoicePaid, 0);
+  const needsInitialPayment = Boolean(selectedInvoice)
+    && selectedInvoice?.payment_status !== "paid"
+    && remainingInitialPayment > 0;
+  const hasPartialPayment = invoicePaid > 0 && invoicePaid < invoiceTotal;
 
   return (
     <div className="min-h-screen bg-[#f3f7f4] text-[#18271f]">
@@ -502,7 +539,7 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
                         <h3 className="line-clamp-1 text-[15px] font-bold">{item.name}</h3>
                         {item.description && <p className="mt-1 line-clamp-2 min-h-8 text-[11px] leading-relaxed text-[#748279]">{item.description}</p>}
                         {features.length > 0 && <ul className="mt-2 space-y-1">{features.map((feature) => <li key={feature} className="flex items-center gap-1.5 truncate text-[10px] text-[#718078]"><span className="h-1 w-1 shrink-0 rounded-full bg-[#39a866]" />{feature}</li>)}</ul>}
-                        <div className="mt-3 flex items-end justify-between gap-2"><div><p className="text-[9px] font-semibold uppercase tracking-wide text-[#849188]">Mulai dari</p><p className="mt-0.5 text-[15px] font-extrabold text-[#087b45]">{formatRupiah(Number(item.price))}</p></div><div className="flex items-center gap-2"><button type="button" onClick={() => addToCart(item)} aria-label={inCart ? "Paket sudah ada di keranjang" : "Tambah ke keranjang"} className={`grid h-10 w-10 place-items-center rounded-[12px] border ${inCart ? "border-[#b9dfc6] bg-[#e9f6ed] text-[#087b45]" : "border-[#dfe8e1] bg-white text-[#087b45]"}`}>{inCart ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}</button><button type="button" onClick={() => void openBooking(item)} className="flex h-10 items-center gap-1.5 rounded-[12px] bg-[#087b45] px-3.5 text-xs font-bold text-white transition-colors hover:bg-[#06683a]">Pesan <ChevronRight className="h-3.5 w-3.5" /></button></div></div>
+                        <div className="mt-3 flex items-end justify-between gap-2"><div><p className="text-[9px] font-semibold uppercase tracking-wide text-[#849188]">Mulai dari</p><p className="mt-0.5 text-[15px] font-extrabold text-[#087b45]">{formatRupiah(Number(item.price))}</p><p className="mt-0.5 text-[10px] text-[#819087]">{getPackagePriceUnit(item.price_unit)}</p><p className="mt-0.5 text-[10px] text-[#819087]">{item.allow_extra_days === false ? "Tidak dapat tambah hari" : Number(item.extra_day_price || 0) > 0 ? `Hari tambahan: ${formatRupiah(Number(item.extra_day_price))}/hari` : "Hari tambahan gratis"}</p></div><div className="flex items-center gap-2"><button type="button" onClick={() => addToCart(item)} aria-label={inCart ? "Paket sudah ada di keranjang" : "Tambah ke keranjang"} className={`grid h-10 w-10 place-items-center rounded-[12px] border ${inCart ? "border-[#b9dfc6] bg-[#e9f6ed] text-[#087b45]" : "border-[#dfe8e1] bg-white text-[#087b45]"}`}>{inCart ? <Check className="h-4 w-4" /> : <Plus className="h-4 w-4" />}</button><button type="button" onClick={() => void openBooking(item)} className="flex h-10 items-center gap-1.5 rounded-[12px] bg-[#087b45] px-3.5 text-xs font-bold text-white transition-colors hover:bg-[#06683a]">Pesan <ChevronRight className="h-3.5 w-3.5" /></button></div></div>
                       </div>
                     </article>
                   );
@@ -518,7 +555,26 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
             {loadingBookings ? <div className="grid min-h-44 place-items-center rounded-[16px] bg-white text-[#087b45]"><LoaderCircle className="h-7 w-7 animate-spin" /></div> : bookings.length === 0 ? (
               <div className="rounded-[17px] border border-[#e3ebe5] bg-white px-6 py-12 text-center"><ClipboardList className="mx-auto h-9 w-9 text-[#93a49a]" /><p className="mt-3 text-sm font-bold">Belum ada pesanan</p><p className="mt-1 text-xs text-[#819087]">Paket yang Anda pesan akan muncul di sini.</p><button type="button" onClick={() => setView("home")} className="mt-4 rounded-[11px] bg-[#087b45] px-4 py-2.5 text-xs font-bold text-white">Jelajahi paket</button></div>
             ) : (
-              <div className="space-y-3">{bookings.map((booking) => { const eventList = parseEventDetails(booking.event_details); const firstEvent = eventList[0]; return <article key={booking.id} role="button" tabIndex={0} aria-label={`Lihat detail pesanan ${booking.client_name || booking.id}`} onClick={() => setSelectedBooking(booking)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedBooking(booking); } }} className="cursor-pointer rounded-[16px] border border-[#e3ebe5] bg-white p-4 text-left transition hover:border-[#9bc9aa] hover:shadow-[0_6px_18px_rgba(24,39,31,0.07)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087b45]"><div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-[#809087]">{getPackageCategoryLabel(booking.service_type || "Layanan")}</p><h3 className="mt-1 text-sm font-bold">{String(firstEvent?.eventName || "Pesanan layanan")}</h3></div><span className="shrink-0 rounded-full bg-[#fff3df] px-2.5 py-1 text-[9px] font-bold text-[#a76114]">{booking.status === "pending_payment" ? "Menunggu DP" : booking.status === "locked" ? "Terjadwal" : booking.status || "Diproses"}</span></div>{firstEvent && <div className="mt-3 space-y-1.5 border-t border-[#edf1ee] pt-3 text-[11px] text-[#718078]"><p className="flex items-center gap-2"><CalendarDays className="h-3.5 w-3.5 text-[#087b45]" />{formatOrderDate(firstEvent.date)} {firstEvent.startTime || firstEvent.time ? `· ${String(firstEvent.startTime || firstEvent.time)}` : ""}</p><p className="flex items-start gap-2"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#087b45]" />{String(firstEvent.address || "Lokasi belum tersedia")}</p></div>}<p className="mt-3 border-t border-[#edf1ee] pt-3 text-[10px] font-semibold text-[#087b45]">Lihat seluruh detail pesanan <ChevronRight className="ml-1 inline h-3.5 w-3.5" /></p></article>; })}</div>
+              <div className="space-y-3">{bookings.map((booking) => {
+                const eventList = parseEventDetails(booking.event_details);
+                const firstEvent = eventList[0];
+                const invoice = invoices.find((item) => String(item.booking_id) === String(booking.id));
+                const totalAmount = Number(invoice?.total_amount || 0);
+                const paidAmount = Number(invoice?.paid_amount || 0);
+                const minimumDp = Number(invoice?.dp_amount || totalAmount * 0.5);
+                const paymentPlan = invoice?.payment_plan === "full" ? "Bayar penuh" : "Bayar DP";
+                const initialPayment = invoice?.payment_plan === "full" ? totalAmount : minimumDp;
+                return (
+                  <article key={booking.id} role="button" tabIndex={0} aria-label={`Lihat detail pesanan ${booking.client_name || booking.id}`} onClick={() => setSelectedBooking(booking)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedBooking(booking); } }} className="cursor-pointer rounded-[16px] border border-[#e3ebe5] bg-white p-4 text-left transition hover:border-[#9bc9aa] hover:shadow-[0_6px_18px_rgba(24,39,31,0.07)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087b45]">
+                    <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-[#809087]">{getPackageCategoryLabel(booking.service_type || "Layanan")}</p><h3 className="mt-1 text-sm font-bold">{String(firstEvent?.eventName || "Pesanan layanan")}</h3></div><span className="shrink-0 rounded-full bg-[#fff3df] px-2.5 py-1 text-[9px] font-bold text-[#a76114]">{booking.status === "pending_payment" ? "Menunggu pembayaran" : booking.status === "locked" ? "Terjadwal" : booking.status || "Diproses"}</span></div>
+                    {firstEvent && <div className="mt-3 space-y-1.5 border-t border-[#edf1ee] pt-3 text-[11px] text-[#718078]"><p className="flex items-center gap-2"><CalendarDays className="h-3.5 w-3.5 text-[#087b45]" />{formatOrderDate(firstEvent.date)} {firstEvent.startTime || firstEvent.time ? `· ${String(firstEvent.startTime || firstEvent.time)}` : ""}</p><p className="flex items-start gap-2"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#087b45]" />{String(firstEvent.address || "Lokasi belum tersedia")}</p></div>}
+                    {invoice && <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[#edf1ee] pt-3 text-[11px]"><div><p className="text-[#819087]">Pilihan pembayaran</p><p className="mt-0.5 font-semibold">{paymentPlan}</p></div><div><p className="text-[#819087]">Metode</p><p className="mt-0.5 font-semibold">{invoice.payment_method === "cash" ? "Tunai" : invoice.payment_method === "transfer" ? "Transfer" : "Belum dipilih"}</p></div><div><p className="text-[#819087]">Nominal pembayaran</p><p className="mt-0.5 font-semibold text-[#087b45]">{formatRupiah(initialPayment)}</p></div><div><p className="text-[#819087]">Sudah dibayar</p><p className="mt-0.5 font-semibold">{formatRupiah(paidAmount)}</p></div></div>}
+                    {invoice && paidAmount < totalAmount && <p className="mt-3 rounded-[10px] bg-[#f3f7f4] px-3 py-2 text-[10px] text-[#627168]">Sisa pembayaran: <strong>{formatRupiah(Math.max(totalAmount - paidAmount, 0))}</strong></p>}
+                    {invoice && paidAmount > 0 && paidAmount < totalAmount && <p role="note" className="mt-2 rounded-[10px] border border-[#f1d8a9] bg-[#fff8e9] px-3 py-2 text-[10px] font-semibold leading-relaxed text-[#8b6737]">Pelunasan wajib dilakukan paling lambat H-3 sebelum acara.</p>}
+                    <p className="mt-3 border-t border-[#edf1ee] pt-3 text-[10px] font-semibold text-[#087b45]">Lihat seluruh detail pesanan <ChevronRight className="ml-1 inline h-3.5 w-3.5" /></p>
+                  </article>
+                );
+              })}</div>
             )}
           </section>
         )}
@@ -529,7 +585,7 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
             {cartPackages.length === 0 ? (
               <div className="rounded-[17px] border border-[#e3ebe5] bg-white px-6 py-12 text-center"><ShoppingBasket className="mx-auto h-9 w-9 text-[#93a49a]" /><p className="mt-3 text-sm font-bold">Keranjang masih kosong</p><p className="mt-1 text-xs text-[#819087]">Simpan paket yang ingin Anda pesan.</p><button type="button" onClick={() => setView("home")} className="mt-4 rounded-[11px] bg-[#087b45] px-4 py-2.5 text-xs font-bold text-white">Cari paket</button></div>
             ) : (
-              <div className="space-y-3">{cartPackages.map((item) => <article key={item.id} className="flex gap-3 rounded-[16px] border border-[#e3ebe5] bg-white p-3"><div className="h-[76px] w-[82px] shrink-0 overflow-hidden rounded-[12px] bg-[#e9f1eb]">{item.image_url || item.image ? <img src={item.image_url || item.image || ""} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-[#8ba092]"><Package className="h-6 w-6" /></div>}</div><div className="min-w-0 flex-1 py-0.5"><p className="text-[9px] font-bold uppercase text-[#087b45]">{getPackageCategoryLabel(item.type)}</p><h3 className="mt-1 truncate text-sm font-bold">{item.name}</h3><p className="mt-1 text-xs font-bold text-[#087b45]">{formatRupiah(Number(item.price))}</p></div><div className="flex flex-col items-end justify-between"><button type="button" onClick={() => setCartIds((current) => current.filter((id) => id !== String(item.id)))} aria-label={`Hapus ${item.name} dari keranjang`} className="grid h-8 w-8 place-items-center rounded-full text-[#9aa69f] hover:bg-[#fff0ee] hover:text-[#bd554c]"><Trash2 className="h-4 w-4" /></button><button type="button" onClick={() => void startCheckout(item)} className="rounded-[10px] bg-[#087b45] px-3 py-2 text-[10px] font-bold text-white">Pesan</button></div></article>)}</div>
+              <div className="space-y-3">{cartPackages.map((item) => <article key={item.id} className="flex gap-3 rounded-[16px] border border-[#e3ebe5] bg-white p-3"><div className="h-[76px] w-[82px] shrink-0 overflow-hidden rounded-[12px] bg-[#e9f1eb]">{item.image_url || item.image ? <img src={item.image_url || item.image || ""} alt="" className="h-full w-full object-cover" /> : <div className="grid h-full place-items-center text-[#8ba092]"><Package className="h-6 w-6" /></div>}</div><div className="min-w-0 flex-1 py-0.5"><p className="text-[9px] font-bold uppercase text-[#087b45]">{getPackageCategoryLabel(item.type)}</p><h3 className="mt-1 truncate text-sm font-bold">{item.name}</h3><p className="mt-1 text-xs font-bold text-[#087b45]">{formatRupiah(Number(item.price))}</p><p className="mt-0.5 text-[10px] text-[#819087]">{getPackagePriceUnit(item.price_unit)}</p></div><div className="flex flex-col items-end justify-between"><button type="button" onClick={() => setCartIds((current) => current.filter((id) => id !== String(item.id)))} aria-label={`Hapus ${item.name} dari keranjang`} className="grid h-8 w-8 place-items-center rounded-full text-[#9aa69f] hover:bg-[#fff0ee] hover:text-[#bd554c]"><Trash2 className="h-4 w-4" /></button><button type="button" onClick={() => void startCheckout(item)} className="rounded-[10px] bg-[#087b45] px-3 py-2 text-[10px] font-bold text-white">Pesan</button></div></article>)}</div>
             )}
           </section>
         )}
@@ -604,7 +660,7 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
                 )}
               </section>
 
-              {selectedBooking.notes && <section className="rounded-[14px] border border-[#e1e9e3] bg-white p-4"><h3 className="text-xs font-bold">Catatan pesanan</h3><p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-[#718078]">{typeof selectedBooking.notes === "string" ? selectedBooking.notes : JSON.stringify(selectedBooking.notes, null, 2)}</p></section>}
+              {customerNote && <section className="rounded-[14px] border border-[#e1e9e3] bg-white p-4"><h3 className="text-xs font-bold">Catatan pesanan</h3><p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-[#718078]">{customerNote}</p></section>}
 
               <section className="rounded-[15px] border border-[#dce9df] bg-white p-4">
                 <h3 className="flex items-center gap-2 text-xs font-bold"><CreditCard className="h-4 w-4 text-[#087b45]" />Rincian pembayaran</h3>
@@ -612,26 +668,35 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
                   <div className="mt-3 space-y-2 text-xs">
                     <div className="flex justify-between gap-3 text-[#718078]"><span>Total pesanan</span><strong className="text-[#18271f]">{formatRupiah(Number(selectedInvoice.total_amount || 0))}</strong></div>
                     <div className="flex justify-between gap-3 text-[#718078]"><span>DP minimum</span><strong className="text-[#18271f]">{formatRupiah(Number(selectedInvoice.dp_amount || Number(selectedInvoice.total_amount || 0) * 0.5))}</strong></div>
+                    <div className="flex justify-between gap-3 text-[#718078]"><span>Pilihan pembayaran</span><strong className="text-[#18271f]">{selectedInvoice.payment_plan === "full" ? "All-in" : "DP"}</strong></div>
+                    <div className="flex justify-between gap-3 text-[#718078]"><span>Metode</span><strong className="text-[#18271f]">{selectedInvoice.payment_method === "cash" ? "Tunai" : selectedInvoice.payment_method === "transfer" ? "Transfer" : "Belum dipilih"}</strong></div>
                     <div className="flex justify-between gap-3 text-[#718078]"><span>Sudah dibayar</span><strong className="text-[#087b45]">{formatRupiah(Number(selectedInvoice.paid_amount || 0))}</strong></div>
                     <div className="flex justify-between gap-3 border-t border-[#edf1ee] pt-2 font-bold"><span>Sisa pembayaran</span><span>{formatRupiah(Math.max(Number(selectedInvoice.total_amount || 0) - Number(selectedInvoice.paid_amount || 0), 0))}</span></div>
                   </div>
                 ) : <p className="mt-2 text-xs text-[#819087]">Rincian invoice belum tersedia.</p>}
               </section>
 
-              {needsDownPayment && (
+              {needsInitialPayment && (
                 <section className="rounded-[15px] border border-[#f1d8a9] bg-[#fff8e9] p-4">
-                  <h3 className="text-sm font-bold text-[#7b4d14]">Instruksi pembayaran DP</h3>
-                  <p className="mt-1 text-xs text-[#8b6737]">Silakan bayar DP sebesar <strong>{formatRupiah(remainingDownPayment)}</strong>, lalu konfirmasi melalui WhatsApp.</p>
-                  <div className="mt-3 space-y-2 rounded-[12px] border border-[#f1e4c9] bg-white p-3 text-xs text-[#52645a]">
-                    <p className="font-bold">Transfer bank / e-wallet · a.n. Guntur Bayu Jantoro</p>
-                    <p>BCA: 8435901499</p>
-                    <p>SeaBank: 901760387739</p>
-                    <p>DANA: 08117873878</p>
-                    <p className="border-t border-[#edf1ee] pt-2">Tunai: bayar langsung di Galeri Maeng Studio, Jl. Kapten Robani Kadir LRG Maeng No 06 RT 016 RW 004 Kel. Talangputri, Kec. Plaju.</p>
-                  </div>
-                  <a href={`https://wa.me/628117873878?text=${encodeURIComponent(`Halo Maeng Studio, saya sudah membayar DP untuk pesanan ${String(selectedBooking.id)}.`)}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex h-10 items-center justify-center rounded-[10px] bg-[#087b45] px-4 text-xs font-bold text-white">Konfirmasi via WhatsApp</a>
+                  <h3 className="text-sm font-bold text-[#7b4d14]">{selectedInvoice?.payment_plan === "full" ? "Instruksi pembayaran penuh" : "Instruksi pembayaran DP"}</h3>
+                  <p className="mt-1 text-xs text-[#8b6737]">{selectedInvoice?.payment_plan === "full" ? "Silakan bayar penuh sebesar" : "Silakan bayar DP minimal 50% sebesar"} <strong>{formatRupiah(remainingInitialPayment)}</strong>{selectedInvoice?.payment_method === "transfer" ? ", lalu konfirmasi melalui WhatsApp." : "."}</p>
+                  {selectedInvoice?.payment_method === "cash" ? (
+                    <div className="mt-3 rounded-[12px] border border-[#f1e4c9] bg-white p-3 text-xs text-[#52645a]">
+                      <p className="font-bold">Pembayaran tunai di Galeri Maeng Studio</p>
+                      <p className="mt-1">Jl. Kapten Robani Kadir LRG Maeng No 06 RT 016 RW 004 Kel. Talangputri, Kec. Plaju.</p>
+                    </div>
+                  ) : (
+                    <div className="mt-3 space-y-2 rounded-[12px] border border-[#f1e4c9] bg-white p-3 text-xs text-[#52645a]">
+                      <p className="font-bold">Transfer bank / e-wallet · a.n. Guntur Bayu Jantoro</p>
+                      <p>BCA: 8435901499</p>
+                      <p>SeaBank: 901760387739</p>
+                      <p>DANA: 08117873878</p>
+                    </div>
+                  )}
+                  {selectedInvoice?.payment_method !== "cash" && <a href={`https://wa.me/628117873878?text=${encodeURIComponent(`Halo Maeng Studio, saya sudah membayar untuk pesanan ${String(selectedBooking.id)}.`)}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex h-10 items-center justify-center rounded-[10px] bg-[#087b45] px-4 text-xs font-bold text-white">Konfirmasi via WhatsApp</a>}
                 </section>
               )}
+              {hasPartialPayment && <p role="note" className="rounded-[12px] border border-[#f1d8a9] bg-[#fff8e9] p-3 text-xs font-semibold leading-relaxed text-[#8b6737]">Pelunasan wajib dilakukan paling lambat H-3 sebelum acara.</p>}
             </div>
           </section>
         </div>
@@ -653,10 +718,61 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
                 {eventType === "Lainnya" && <label className="text-[10px] font-bold text-[#627168] sm:col-span-2">Jenis acara lainnya<input required value={customEventType} onChange={(event) => setCustomEventType(event.target.value)} className="mt-1.5 h-11 w-full rounded-[11px] border border-[#dfe8e1] bg-white px-3 text-sm font-normal text-[#18271f] outline-none focus:border-[#087b45]" /></label>}
                 {eventType === "Pernikahan" && bookerType === "orang_lain" && <><label className="text-[10px] font-bold text-[#627168]">Nama pria<input required value={groomName} onChange={(event) => setGroomName(event.target.value)} className="mt-1.5 h-11 w-full rounded-[11px] border border-[#dfe8e1] bg-white px-3 text-sm font-normal text-[#18271f] outline-none focus:border-[#087b45]" /></label><label className="text-[10px] font-bold text-[#627168]">Nama wanita<input required value={brideName} onChange={(event) => setBrideName(event.target.value)} className="mt-1.5 h-11 w-full rounded-[11px] border border-[#dfe8e1] bg-white px-3 text-sm font-normal text-[#18271f] outline-none focus:border-[#087b45]" /></label></>}
               </div>
-              <div className="flex items-center justify-between border-b border-[#e3ebe5] pb-2"><div><h3 className="text-sm font-bold">Jadwal pelaksanaan</h3><p className="mt-0.5 text-[10px] text-[#819087]">Maksimal dua rangkaian tanggal</p></div>{events.length < 2 && <button type="button" onClick={() => setEvents((current) => [...current, newEvent()])} className="flex items-center gap-1 rounded-[9px] bg-[#e6f4eb] px-2.5 py-2 text-[10px] font-bold text-[#087b45]"><Plus className="h-3.5 w-3.5" />Tambah hari</button>}</div>
+              <div className="flex items-center justify-between gap-3 border-b border-[#e3ebe5] pb-2"><div><h3 className="text-sm font-bold">Jadwal pelaksanaan</h3><p className="mt-0.5 text-[10px] text-[#819087]">{selectedPackageAllowsExtraDays ? `Maksimal ${MAX_BOOKING_EVENT_DAYS} hari${selectedExtraDayPrice > 0 ? ` · ${formatRupiah(selectedExtraDayPrice)} per hari tambahan` : " · hari tambahan gratis"}` : "Paket ini hanya mengizinkan satu hari event."}</p></div>{selectedPackageAllowsExtraDays && events.length < MAX_BOOKING_EVENT_DAYS && <button type="button" onClick={() => setEvents((current) => current.length < MAX_BOOKING_EVENT_DAYS ? [...current, newEvent()] : current)} className="flex shrink-0 items-center gap-1 rounded-[9px] bg-[#e6f4eb] px-2.5 py-2 text-[10px] font-bold text-[#087b45]"><Plus className="h-3.5 w-3.5" />Tambah hari</button>}</div>
               {events.map((event, index) => <div key={event.id} className="space-y-3 rounded-[14px] border border-[#e1e9e3] bg-white p-3.5"><div className="flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-wide text-[#087b45]">Acara hari {index + 1}</span>{index > 0 && <button type="button" onClick={() => setEvents((current) => current.filter((_, eventIndex) => eventIndex !== index))} aria-label={`Hapus acara hari ${index + 1}`} className="text-[#9ba79f]"><Minus className="h-4 w-4" /></button>}</div><div className="grid grid-cols-1 gap-3 sm:grid-cols-3"><label className="text-[10px] font-bold text-[#627168]">Tanggal<input required type="date" value={event.date} onChange={(inputEvent) => updateEvent(index, "date", inputEvent.target.value)} className="mt-1.5 h-10 w-full rounded-[10px] border border-[#dfe8e1] bg-white px-2 text-xs font-normal text-[#18271f] outline-none focus:border-[#087b45]" /></label><label className="text-[10px] font-bold text-[#627168]">Nama acara<input required placeholder="Akad nikah" value={event.eventName} onChange={(inputEvent) => updateEvent(index, "eventName", inputEvent.target.value)} className="mt-1.5 h-10 w-full rounded-[10px] border border-[#dfe8e1] bg-white px-2 text-xs font-normal text-[#18271f] outline-none focus:border-[#087b45]" /></label><label className="text-[10px] font-bold text-[#627168]">Jam mulai<input required type="time" value={event.startTime} onChange={(inputEvent) => updateEvent(index, "startTime", inputEvent.target.value)} className="mt-1.5 h-10 w-full rounded-[10px] border border-[#dfe8e1] bg-white px-2 text-xs font-normal text-[#18271f] outline-none focus:border-[#087b45]" /></label><label className="text-[10px] font-bold text-[#627168] sm:col-span-3">Alamat acara<textarea required rows={2} placeholder="Nama gedung, jalan, dan patokan lokasi" value={event.address} onChange={(inputEvent) => updateEvent(index, "address", inputEvent.target.value)} className="mt-1.5 w-full resize-y rounded-[10px] border border-[#dfe8e1] bg-white px-3 py-2.5 text-xs font-normal text-[#18271f] outline-none focus:border-[#087b45]" /></label></div></div>)}
               <label className="block text-[10px] font-bold text-[#627168]">Catatan tambahan<textarea rows={2} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Permintaan khusus (opsional)" className="mt-1.5 w-full resize-y rounded-[10px] border border-[#dfe8e1] bg-white px-3 py-2.5 text-xs font-normal text-[#18271f] outline-none focus:border-[#087b45]" /></label>
-              <div className="flex flex-col gap-3 rounded-[14px] bg-[#e9f5ed] p-4 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-[10px] font-bold uppercase tracking-wide text-[#4c765c]">DP 50% · {formatRupiah(Number(selectedPackage.price || 0) * 0.5)}</p><p className="mt-1 text-xs text-[#6d8173]">Total paket {formatRupiah(Number(selectedPackage.price || 0))}</p></div><button type="submit" disabled={isSubmitting} className="flex h-11 items-center justify-center gap-2 rounded-[11px] bg-[#087b45] px-5 text-xs font-bold text-white disabled:opacity-60">{isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{isSubmitting ? "Memproses..." : "Konfirmasi pesanan"}</button></div>
+              <section className="space-y-3 rounded-[14px] border border-[#dce9df] bg-white p-4">
+                <div>
+                  <h3 className="text-sm font-bold">Metode Pembayaran</h3>
+                  <p className="mt-1 text-[10px] text-[#819087]">Pilih bayar DP atau lunas, lalu pilih cara pembayarannya.</p>
+                </div>
+                <fieldset className="space-y-2">
+                  <legend className="text-[10px] font-bold text-[#627168]">Jumlah pembayaran</legend>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className={`cursor-pointer rounded-[11px] border p-3 ${paymentPlan === "dp" ? "border-[#087b45] bg-[#e9f6ed]" : "border-[#dfe8e1]"}`}>
+                      <input type="radio" name="mobile-payment-plan" value="dp" checked={paymentPlan === "dp"} onChange={() => setPaymentPlan("dp")} className="sr-only" />
+                      <span className="block text-xs font-bold">Bayar DP</span>
+                      <span className="mt-1 block text-[10px] text-[#718078]">Minimal 50%</span>
+                      <span className="mt-1 block text-xs font-bold text-[#087b45]">{formatRupiah(selectedPackageTotal * 0.5)}</span>
+                    </label>
+                    <label className={`cursor-pointer rounded-[11px] border p-3 ${paymentPlan === "full" ? "border-[#087b45] bg-[#e9f6ed]" : "border-[#dfe8e1]"}`}>
+                      <input type="radio" name="mobile-payment-plan" value="full" checked={paymentPlan === "full"} onChange={() => setPaymentPlan("full")} className="sr-only" />
+                      <span className="block text-xs font-bold">All-in</span>
+                      <span className="mt-1 block text-[10px] text-[#718078]">Bayar penuh</span>
+                      <span className="mt-1 block text-xs font-bold text-[#087b45]">{formatRupiah(selectedPackageTotal)}</span>
+                    </label>
+                  </div>
+                </fieldset>
+                {paymentPlan === "dp" && <p role="note" className="rounded-[10px] border border-[#f1d8a9] bg-[#fff8e9] px-3 py-2 text-[10px] leading-relaxed text-[#8b6737]">Sisa pembayaran wajib dilunasi paling lambat H-3 sebelum tanggal acara.</p>}
+                <fieldset className="space-y-2">
+                  <legend className="text-[10px] font-bold text-[#627168]">Cara pembayaran</legend>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className={`cursor-pointer rounded-[11px] border p-3 text-xs font-bold ${paymentMethod === "transfer" ? "border-[#087b45] bg-[#e9f6ed]" : "border-[#dfe8e1]"}`}>
+                      <input type="radio" name="mobile-payment-method" value="transfer" checked={paymentMethod === "transfer"} onChange={() => setPaymentMethod("transfer")} className="sr-only" />Transfer
+                    </label>
+                    <label className={`cursor-pointer rounded-[11px] border p-3 text-xs font-bold ${paymentMethod === "cash" ? "border-[#087b45] bg-[#e9f6ed]" : "border-[#dfe8e1]"}`}>
+                      <input type="radio" name="mobile-payment-method" value="cash" checked={paymentMethod === "cash"} onChange={() => setPaymentMethod("cash")} className="sr-only" />Tunai
+                    </label>
+                  </div>
+                </fieldset>
+                {paymentMethod === "transfer" ? (
+                  <div className="space-y-1 rounded-[10px] bg-[#f3f7f4] p-3 text-[10px] text-[#52645a]">
+                    <p className="font-bold">Transfer bank / e-wallet · a.n. Guntur Bayu Jantoro</p>
+                    <p>BCA: 8435901499 · SeaBank: 901760387739 · DANA: 08117873878</p>
+                    <p className="pt-1">Setelah transfer, konfirmasi melalui WhatsApp.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1 rounded-[10px] bg-[#f3f7f4] p-3 text-[10px] text-[#52645a]">
+                    <p className="font-bold">Bayar langsung di Galeri Maeng Studio.</p>
+                    <p>Jl. Kapten Robani Kadir LRG Maeng No 06 RT 016 RW 004 Kel. Talangputri, Kec. Plaju.</p>
+                  </div>
+                )}
+                <div className="flex items-center justify-between border-t border-[#edf1ee] pt-3 text-xs">
+                  <span className="text-[#718078]">Nominal pembayaran</span>
+                  <strong className="text-[#087b45]">{formatRupiah(paymentPlan === "full" ? selectedPackageTotal : selectedPackageTotal * 0.5)}</strong>
+                </div>
+              </section>
+              <button type="submit" disabled={isSubmitting} className="flex h-11 w-full items-center justify-center gap-2 rounded-[11px] bg-[#087b45] px-5 text-xs font-bold text-white disabled:opacity-60">{isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{isSubmitting ? "Memproses..." : "Konfirmasi pesanan"}</button>
             </form>
           </section>
         </div>

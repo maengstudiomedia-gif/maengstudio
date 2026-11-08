@@ -31,6 +31,7 @@ import { getPublicPackages } from "@/app/actions/publicActions";
 import { checkGoogleDriveConfigAction, persistPortalConfigAction } from "@/app/actions/driveActions";
 import AdminBookingCalendarPanel from "@/app/components/bookingCalendar/AdminBookingCalendarPanel";
 import { getAppBaseUrl } from "@/lib/app-url";
+import { getPackagePriceUnit } from "@/lib/package-price";
 
 // Fungsi Helper Format Rupiah
 function formatRupiah(value: number) {
@@ -166,7 +167,7 @@ export default function AdminDashboardPage() {
     const baseUrl = getAppBaseUrl();
     const bookingUrl = `${baseUrl}/book?name=${encodeURIComponent(publicLeadName)}&phone=${encodeURIComponent(publicLeadPhone)}&packageId=${encodeURIComponent(publicLeadPackageId)}`;
 
-    const textWa = `Halo ${publicLeadName},\n\nSaya kirimkan link untuk mengisi form booking Maeng Studio. Silakan klik tautan berikut untuk langsung masuk ke formulir booking dan memilih paket Anda:\n${bookingUrl}\n\nPaket: ${selectedPackage?.name ?? "Paket pilihan"}\nHarga mulai: ${selectedPackage ? formatRupiah(Number(selectedPackage.price || 0)) : "-"}\n\nTerima kasih.`;
+    const textWa = `Halo ${publicLeadName},\n\nSaya kirimkan link untuk mengisi form booking Maeng Studio. Silakan klik tautan berikut untuk langsung masuk ke formulir booking dan memilih paket Anda:\n${bookingUrl}\n\nPaket: ${selectedPackage?.name ?? "Paket pilihan"}\nHarga mulai: ${selectedPackage ? `${formatRupiah(Number(selectedPackage.price || 0))} / ${getPackagePriceUnit(selectedPackage.price_unit)}` : "-"}\n\nTerima kasih.`;
 
     window.open(`https://wa.me/${formattedPhone}?text=${encodeURIComponent(textWa)}`, "_blank");
   };
@@ -369,7 +370,7 @@ export default function AdminDashboardPage() {
               >
                 <option value="">Pilih Paket untuk Link</option>
                 {publicPackages.map((pkg) => (
-                  <option key={pkg.id} value={pkg.id}>{pkg.name} - {formatRupiah(Number(pkg.price || 0))}</option>
+                  <option key={pkg.id} value={pkg.id}>{pkg.name} - {formatRupiah(Number(pkg.price || 0))} / {getPackagePriceUnit(pkg.price_unit)}</option>
                 ))}
               </select>
               <button

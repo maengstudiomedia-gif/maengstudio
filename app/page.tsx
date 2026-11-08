@@ -18,6 +18,7 @@ import { getPublicPackages, getClientShowcase } from "@/app/actions/publicAction
 import PublicBookingCalendarSection from "@/app/components/bookingCalendar/PublicBookingCalendarSection";
 import MobileHomeApp from "@/app/components/MobileHomeApp";
 import { PACKAGE_CATEGORIES, getPackageCategoryLabel } from "@/lib/package-categories";
+import { getPackagePriceUnit } from "@/lib/package-price";
 
 // Fungsi Helper Format Rupiah
 function formatRupiah(value: number) {
@@ -220,9 +221,11 @@ function LandingPageLegacy() {
                       <div>
                         <p className="text-[10px] text-white/30 uppercase font-bold tracking-tighter">Mulai Dari</p>
                         <p className="text-xl font-bold text-emerald-400">{formatRupiah(pkg.price)}</p>
+                        <p className="mt-1 text-xs text-white/45">{getPackagePriceUnit(pkg.price_unit)}</p>
+                        <p className="mt-1 text-[10px] text-white/45">{pkg.allow_extra_days === false ? "Tidak dapat tambah hari" : Number(pkg.extra_day_price || 0) > 0 ? `Hari tambahan: ${formatRupiah(Number(pkg.extra_day_price))}/hari` : "Hari tambahan gratis"}</p>
                       </div>
                       <a 
-                        href={`https://wa.me/628117873878?text=Halo Maeng Studio, saya tertarik dengan ${pkg.name} seharga ${formatRupiah(pkg.price)}`} 
+                        href={`https://wa.me/628117873878?text=Halo Maeng Studio, saya tertarik dengan ${pkg.name} seharga ${formatRupiah(pkg.price)} ${getPackagePriceUnit(pkg.price_unit)}`} 
                         target="_blank" 
                         rel="noopener noreferrer"
                         className="p-3 bg-white/5 rounded-xl group-hover:bg-blue-600 transition-colors"

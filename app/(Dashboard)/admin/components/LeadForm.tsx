@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, X, Save } from "lucide-react";
 import { getPackagesAction } from "@/app/actions/packages"; 
+import { getPackagePriceUnit } from "@/lib/package-price";
 
 type LeadFormProps = {
   initialData?: any;
@@ -189,7 +190,7 @@ export default function LeadForm({ initialData, onSave, onClose }: LeadFormProps
                 <option value="">-- Pilih Paket --</option>
                 {packages.map(pkg => (
                   <option key={pkg.id} value={pkg.id}>
-                    [{pkg.type === 'audio' ? 'AUDIO' : 'DOC'}] {pkg.name} - {pkg.price ? formatRupiah(pkg.price) : 'Harga belum diatur'}
+                    [{pkg.type === 'audio' ? 'AUDIO' : 'DOC'}] {pkg.name} - {pkg.price ? `${formatRupiah(pkg.price)} / ${getPackagePriceUnit(pkg.price_unit)}` : 'Harga belum diatur'}
                   </option>
                 ))}
               </select>

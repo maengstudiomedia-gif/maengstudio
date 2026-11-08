@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { extractDateKeysFromEventDetails } from "@/lib/bookingCalendar/extractDateKeysFromEventDetails";
+import { calculatePackageTotal, MAX_BOOKING_EVENT_DAYS } from "@/lib/package-event-pricing";
 import { validateBookingEventDatesAction, revalidateBookingCalendarPaths } from "@/app/actions/bookingCalendarActions";
 
 // Helper untuk inisialisasi Supabase di sisi Server (Memastikan RLS berjalan aman)
@@ -72,8 +73,10 @@ export async function createNewBookingAction(payload: any) {
 
   // Ekstrak data yang dikirim dari form komponen (TabNewBooking)
   const { packageId, events, notes } = payload;
+  const paymentPlan = payload.paymentPlan === "full" ? "full" : "dp";
+  const paymentMethod = payload.paymentMethod === "cash" ? "cash" : "transfer";
 
-  if (!events || events.length === 0) {
+    if (!Array.isArray(events) || events.length === 0) {
      return { success: false, message: "Minimal harus ada satu rangkaian acara." };
   }
 
@@ -83,7 +86,7 @@ export async function createNewBookingAction(payload: any) {
   );
   const { data: selectedPackage, error: packageError } = await supabaseAdmin
     .from("packages")
-    .select("price")
+    .select("price, allow_extra_days, extra_day_price")
     .eq("id", packageId)
     .maybeSingle();
 
@@ -91,7 +94,11 @@ export async function createNewBookingAction(payload: any) {
     return { success: false, message: "Paket tidak ditemukan. Silakan pilih paket yang tersedia." };
   }
 
-  const totalPrice = Number(selectedPackage.price || 0);
+  const allowExtraDays = selectedPackage.allow_extra_days !== false;
+  if (events.length > MAX_BOOKING_EVENT_DAYS || (!allowExtraDays && events.length > 1)) {
+    return { success: false, message: "Paket ini tidak mengizinkan jumlah hari event yang dipilih." };
+  }
+  const totalPrice = calculatePackageTotal(selectedPackage.price, selectedPackage.extra_day_price, events.length, allowExtraDays);
   const dpAmount = totalPrice * 0.5;
 
   const dateKeys = extractDateKeysFromEventDetails(events);
@@ -131,6 +138,8 @@ export async function createNewBookingAction(payload: any) {
       total_amount: totalPrice,
       dp_amount: dpAmount,
       paid_amount: 0,
+      payment_plan: paymentPlan,
+      payment_method: paymentMethod,
       payment_status: 'unpaid'
     }]);
 
@@ -147,7 +156,9 @@ export async function createPublicBookingAction(payload: any) {
     process.env.SUPABASE_SERVICE_ROLE_KEY!
   );
 
-  const { packageId, events, notes, totalPrice, dpAmount, name, phone } = payload;
+  const { packageId, events, notes, name, phone } = payload;
+  const paymentPlan = payload.paymentPlan === "full" ? "full" : "dp";
+  const paymentMethod = payload.paymentMethod === "cash" ? "cash" : "transfer";
   const publicBookingUserId = process.env.SUPABASE_PUBLIC_BOOKING_USER_ID;
 
   if (!publicBookingUserId) {
@@ -158,7 +169,22 @@ export async function createPublicBookingAction(payload: any) {
   }
 
   if (!name || !phone) return { success: false, message: "Nama dan nomor WhatsApp wajib diisi." };
-  if (!events || events.length === 0) return { success: false, message: "Minimal harus ada satu rangkaian acara." };
+  if (!Array.isArray(events) || events.length === 0) return { success: false, message: "Minimal harus ada satu rangkaian acara." };
+
+  const { data: selectedPackage, error: packageError } = await supabaseAdmin
+    .from("packages")
+    .select("price, allow_extra_days, extra_day_price")
+    .eq("id", packageId)
+    .maybeSingle();
+  if (packageError || !selectedPackage) {
+    return { success: false, message: "Paket tidak ditemukan. Silakan pilih paket yang tersedia." };
+  }
+  const allowExtraDays = selectedPackage.allow_extra_days !== false;
+  if (events.length > MAX_BOOKING_EVENT_DAYS || (!allowExtraDays && events.length > 1)) {
+    return { success: false, message: "Paket ini tidak mengizinkan jumlah hari event yang dipilih." };
+  }
+  const totalPrice = calculatePackageTotal(selectedPackage.price, selectedPackage.extra_day_price, events.length, allowExtraDays);
+  const dpAmount = totalPrice * 0.5;
 
   const dateKeys = extractDateKeysFromEventDetails(events);
   const cap = await validateBookingEventDatesAction({ dateKeys, excludeBookingId: null });
@@ -192,6 +218,8 @@ export async function createPublicBookingAction(payload: any) {
       total_amount: totalPrice,
       dp_amount: dpAmount,
       paid_amount: 0,
+      payment_plan: paymentPlan,
+      payment_method: paymentMethod,
       payment_status: 'unpaid'
     }]);
 
@@ -203,6 +231,6 @@ export async function createPublicBookingAction(payload: any) {
   revalidateBookingCalendarPaths();
   return {
     success: true,
-    message: "Booking berhasil terkirim. Silakan melakukan pembayaran dan konfirmasi ke WA admin 08117873878."
+    message: "Booking berhasil terkirim. Silakan ikuti instruksi pembayaran sesuai pilihan Anda."
   };
 }

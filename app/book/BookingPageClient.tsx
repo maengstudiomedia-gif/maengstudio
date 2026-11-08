@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { createPublicBookingAction } from "@/app/actions/booking";
 import { getPublicPackages } from "@/app/actions/publicActions";
 import { PACKAGE_CATEGORIES, getPackageCategoryLabel } from "@/lib/package-categories";
+import { calculatePackageTotal, MAX_BOOKING_EVENT_DAYS } from "@/lib/package-event-pricing";
+import { getPackagePriceUnit } from "@/lib/package-price";
 import {
   Loader2,
   ArrowRight,
@@ -58,6 +60,8 @@ export default function BookingPageClient({
     { id: Date.now().toString(), date: "", address: "", eventName: "", startTime: "" },
   ]);
   const [notes, setNotes] = useState("");
+  const [paymentPlan, setPaymentPlan] = useState<"dp" | "full">("dp");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer">("transfer");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -130,7 +134,11 @@ export default function BookingPageClient({
     return packages.find((pkg) => String(pkg.id) === String(selectedPackageId)) || null;
   }, [packages, selectedPackageId]);
 
-  const totalPrice = selectedPackage ? Number(selectedPackage.price || 0) : 0;
+  const allowsExtraDays = selectedPackage?.allow_extra_days !== false;
+  const extraDayPrice = Number(selectedPackage?.extra_day_price || 0);
+  const totalPrice = selectedPackage
+    ? calculatePackageTotal(selectedPackage.price, extraDayPrice, events.length, allowsExtraDays)
+    : 0;
   const dpAmount = totalPrice * 0.5;
 
   const formatRupiah = (value: number) => {
@@ -142,7 +150,7 @@ export default function BookingPageClient({
   };
 
   const addEvent = () => {
-    if (events.length >= 2) return;
+    if (!allowsExtraDays || events.length >= MAX_BOOKING_EVENT_DAYS) return;
     setEvents((prev) => [
       ...prev,
       { id: Date.now().toString(), date: "", address: "", eventName: "", startTime: "" },
@@ -171,6 +179,10 @@ export default function BookingPageClient({
       setMessage({ type: "error", text: "Silakan pilih paket terlebih dahulu." });
       return false;
     }
+    if (events.length > MAX_BOOKING_EVENT_DAYS || (!allowsExtraDays && events.length > 1)) {
+      setMessage({ type: "error", text: "Paket ini tidak mengizinkan penambahan hari event." });
+      return false;
+    }
     if (events.some((event) => !event.date || !event.eventName || !event.startTime || !event.address)) {
       setMessage({ type: "error", text: "Lengkapi semua detail acara sebelum melanjutkan." });
       return false;
@@ -193,8 +205,8 @@ export default function BookingPageClient({
         packageId: selectedPackage.id,
         events,
         notes: notes.trim() || null,
-        totalPrice,
-        dpAmount,
+        paymentPlan,
+        paymentMethod,
       };
 
       const result = await createPublicBookingAction(payload as any);
@@ -243,8 +255,8 @@ export default function BookingPageClient({
               </p>
             </div>
             <div className="text-right text-sm text-white/50">
-              <p>Bayar DP 50% setelah konfirmasi.</p>
-              <p>Hitung ulang biaya saat paket berubah.</p>
+              <p>Pilih DP minimal 50% atau bayar penuh.</p>
+              <p>Biaya hari tambahan mengikuti aturan paket.</p>
             </div>
           </div>
         </div>
@@ -351,7 +363,10 @@ export default function BookingPageClient({
                       <button
                         key={pkg.id}
                         type="button"
-                        onClick={() => setSelectedPackageId(String(pkg.id))}
+                        onClick={() => {
+                          setSelectedPackageId(String(pkg.id));
+                          if (pkg.allow_extra_days === false) setEvents((current) => current.slice(0, 1));
+                        }}
                         className={`text-left rounded-3xl border p-5 transition-all ${
                           isSelected
                             ? "border-amber-500/60 bg-amber-500/[0.08] shadow-[0_0_30px_rgba(245,158,11,0.08)]"
@@ -378,6 +393,8 @@ export default function BookingPageClient({
 
                         <h3 className="text-lg font-semibold text-white">{pkg.name}</h3>
                         <p className="mt-2 text-xl font-bold text-amber-400">{formatRupiah(Number(pkg.price || 0))}</p>
+                        <p className="mt-1 text-xs text-white/45">{getPackagePriceUnit(pkg.price_unit)}</p>
+                        <p className="mt-1 text-xs text-white/45">{pkg.allow_extra_days === false ? "Tidak dapat tambah hari" : Number(pkg.extra_day_price || 0) > 0 ? `Hari tambahan: ${formatRupiah(Number(pkg.extra_day_price))}/hari` : "Hari tambahan gratis"}</p>
                         <p className="mt-2 text-sm leading-relaxed text-white/55">
                           {pkg.description || "Tidak ada deskripsi paket."}
                         </p>
@@ -416,15 +433,15 @@ export default function BookingPageClient({
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <h2 className="text-xl font-semibold">Detail Acara</h2>
-                  <p className="text-sm text-white/50 mt-1">Isi minimal 1 acara. Tambahkan maksimal 2 acara jika perlu.</p>
+                  <p className="text-sm text-white/50 mt-1">{allowsExtraDays ? `Isi minimal 1 acara. Hari tambahan ${extraDayPrice > 0 ? `dikenakan ${formatRupiah(extraDayPrice)} per hari` : "tidak dikenakan biaya"}.` : "Paket ini hanya mengizinkan satu hari event."}</p>
                 </div>
                 <button
                   type="button"
                   onClick={addEvent}
-                  disabled={events.length >= 2}
+                  disabled={!allowsExtraDays || events.length >= MAX_BOOKING_EVENT_DAYS}
                   className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  <Plus className="w-4 h-4" /> Tambah Acara
+                  <Plus className="w-4 h-4" /> Tambah Hari
                 </button>
               </div>
 
@@ -535,36 +552,62 @@ export default function BookingPageClient({
                   <span>DP minimum</span>
                   <span>{formatRupiah(dpAmount)}</span>
                 </div>
+                <div className="flex items-center justify-between border-t border-white/10 pt-3 font-semibold text-white">
+                  <span>Nominal pembayaran</span>
+                  <span>{formatRupiah(paymentPlan === "full" ? totalPrice : dpAmount)}</span>
+                </div>
               </div>
             </div>
 
             <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 space-y-4">
               <div>
-                <h2 className="text-xl font-semibold">Metode Pembayaran</h2>
-                <p className="text-sm text-white/50 mt-1">Transfer atau tunai di galeri. Semua atas nama Guntur Bayu Jantoro.</p>
+                <h2 className="text-xl font-semibold">Pembayaran</h2>
+                <p className="text-sm text-white/50 mt-1">Pilih nominal pembayaran dan cara pembayaran.</p>
               </div>
-              <div className="rounded-3xl bg-white/5 border border-white/10 p-4 text-sm space-y-3">
-                <p className="text-white/80 font-medium">Transfer Bank / E-wallet</p>
-                <p className="text-white/60 text-xs">BCA: 8435901499 a.n. Guntur Bayu Jantoro</p>
-                <p className="text-white/60 text-xs">SeaBank: 901760387739 a.n. Guntur Bayu Jantoro</p>
-                <p className="text-white/60 text-xs">DANA: 08117873878 a.n. Guntur Bayu Jantoro</p>
-                <p className="text-white/60 text-xs">Setelah transfer, konfirmasi WA agar admin segera memproses pesanan Anda.</p>
-              </div>
-              <div className="rounded-3xl bg-white/5 border border-white/10 p-4 text-sm space-y-3">
-                <p className="text-white/80 font-medium">Tunai</p>
-                <p className="text-white/60 text-xs">Bayar langsung di Galeri Maeng Studio.</p>
-                <p className="text-white/60 text-xs">
-                  Alamat: Jl. Kapten Robani Kadir LRG Maeng No 06 RT 016 RW 004 Kel. Talangputri, Kec. Plaju.
-                </p>
-                <a
-                  href="https://maps.app.goo.gl/j1RSyaHJm1ucJDX19"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-amber-300 hover:text-amber-200 text-sm"
-                >
-                  Buka arah Google Maps
-                </a>
-              </div>
+              <fieldset className="space-y-2">
+                <legend className="text-xs font-semibold text-white/70">Pilihan pembayaran</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className={`cursor-pointer rounded-2xl border p-3 text-sm ${paymentPlan === "dp" ? "border-amber-400 bg-amber-500/10" : "border-white/10 bg-white/[0.02]"}`}>
+                    <input type="radio" name="payment-plan" value="dp" checked={paymentPlan === "dp"} onChange={() => setPaymentPlan("dp")} className="sr-only" />
+                    <span className="block font-semibold text-white">Bayar DP</span>
+                    <span className="mt-1 block text-xs text-white/55">Minimal 50% · {formatRupiah(dpAmount)}</span>
+                  </label>
+                  <label className={`cursor-pointer rounded-2xl border p-3 text-sm ${paymentPlan === "full" ? "border-amber-400 bg-amber-500/10" : "border-white/10 bg-white/[0.02]"}`}>
+                    <input type="radio" name="payment-plan" value="full" checked={paymentPlan === "full"} onChange={() => setPaymentPlan("full")} className="sr-only" />
+                    <span className="block font-semibold text-white">All-in</span>
+                    <span className="mt-1 block text-xs text-white/55">Bayar penuh · {formatRupiah(totalPrice)}</span>
+                  </label>
+                </div>
+              </fieldset>
+              {paymentPlan === "dp" && <p role="note" className="rounded-xl border border-amber-400/20 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-200">Sisa pembayaran wajib dilunasi paling lambat H-3 sebelum tanggal acara.</p>}
+              <fieldset className="space-y-2">
+                <legend className="text-xs font-semibold text-white/70">Metode Pembayaran</legend>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className={`cursor-pointer rounded-2xl border p-3 text-sm ${paymentMethod === "transfer" ? "border-amber-400 bg-amber-500/10" : "border-white/10 bg-white/[0.02]"}`}>
+                    <input type="radio" name="payment-method" value="transfer" checked={paymentMethod === "transfer"} onChange={() => setPaymentMethod("transfer")} className="sr-only" />
+                    <span className="font-semibold text-white">Transfer</span>
+                  </label>
+                  <label className={`cursor-pointer rounded-2xl border p-3 text-sm ${paymentMethod === "cash" ? "border-amber-400 bg-amber-500/10" : "border-white/10 bg-white/[0.02]"}`}>
+                    <input type="radio" name="payment-method" value="cash" checked={paymentMethod === "cash"} onChange={() => setPaymentMethod("cash")} className="sr-only" />
+                    <span className="font-semibold text-white">Tunai</span>
+                  </label>
+                </div>
+              </fieldset>
+              {paymentMethod === "transfer" ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm space-y-2">
+                  <p className="font-medium text-white/80">Transfer Bank / E-wallet · a.n. Guntur Bayu Jantoro</p>
+                  <p className="text-xs text-white/60">BCA: 8435901499</p>
+                  <p className="text-xs text-white/60">SeaBank: 901760387739</p>
+                  <p className="text-xs text-white/60">DANA: 08117873878</p>
+                  <p className="border-t border-white/10 pt-2 text-xs text-white/60">Setelah transfer, konfirmasi melalui WhatsApp.</p>
+                </div>
+              ) : (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm space-y-2">
+                  <p className="font-medium text-white/80">Pembayaran tunai</p>
+                  <p className="text-xs leading-relaxed text-white/60">Bayar langsung di Galeri Maeng Studio, Jl. Kapten Robani Kadir LRG Maeng No 06 RT 016 RW 004 Kel. Talangputri, Kec. Plaju.</p>
+                  <a href="https://maps.app.goo.gl/j1RSyaHJm1ucJDX19" target="_blank" rel="noreferrer" className="inline-block text-sm text-amber-300 hover:text-amber-200">Buka arah Google Maps</a>
+                </div>
+              )}
             </div>
 
             <button

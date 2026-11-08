@@ -27,6 +27,10 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
   const [type, setType] = useState<PackageCategory>(getPackageCategoryValue(initialData?.type) || "audio");
   const [name, setName] = useState(initialData?.name || "");
   const [price, setPrice] = useState(initialData?.price?.toString() || "");
+  const [priceUnit, setPriceUnit] = useState(initialData?.price_unit || "per paket");
+  const [allowExtraDays, setAllowExtraDays] = useState(initialData?.allow_extra_days ?? true);
+  const [chargeExtraDay, setChargeExtraDay] = useState(Number(initialData?.extra_day_price || 0) > 0);
+  const [extraDayPrice, setExtraDayPrice] = useState(initialData?.extra_day_price?.toString() || "");
   const [description, setDescription] = useState(initialData?.description || "");
   const [isPopular, setIsPopular] = useState(initialData?.is_popular || false);
   
@@ -65,10 +69,20 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
     setIsLoading(true);
     setMessage({ type: "", text: "" });
 
+    if (allowExtraDays && chargeExtraDay && (!Number.isFinite(Number(extraDayPrice)) || Number(extraDayPrice) <= 0)) {
+      setMessage({ type: "error", text: "Masukkan harga tambahan per hari yang valid." });
+      setIsLoading(false);
+      return;
+    }
+
     const formData = new FormData();
     formData.append("type", type);
     formData.append("name", name);
     formData.append("price", price);
+    formData.append("price_unit", priceUnit);
+    formData.append("allow_extra_days", String(allowExtraDays));
+    formData.append("charge_extra_day", String(allowExtraDays && chargeExtraDay));
+    formData.append("extra_day_price", allowExtraDays && chargeExtraDay ? extraDayPrice : "0");
     formData.append("description", description);
     formData.append("is_popular", isPopular.toString());
     formData.append("features", JSON.stringify(features.filter(f => f.trim() !== "")));
@@ -174,6 +188,23 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
 
                 <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nama Paket" className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white outline-none focus:border-amber-500 transition-all" required />
                 <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Harga (Contoh: 1500000)" className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white outline-none focus:border-amber-500 transition-all" required />
+                <input type="text" value={priceUnit} onChange={(e) => setPriceUnit(e.target.value)} placeholder="Satuan harga (contoh: per event, per porsi, per jam)" aria-label="Satuan harga" className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white outline-none focus:border-amber-500 transition-all" required />
+                <section className="space-y-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                  <label className="flex cursor-pointer items-start gap-3 text-sm text-white/80">
+                    <input type="checkbox" checked={allowExtraDays} onChange={(event) => setAllowExtraDays(event.target.checked)} className="mt-0.5 h-4 w-4 accent-amber-500" />
+                    <span><span className="block font-semibold">Izinkan customer menambah hari event</span><span className="mt-1 block text-xs text-white/45">Jika tidak dicentang, pesanan dibatasi untuk satu hari event.</span></span>
+                  </label>
+                  {allowExtraDays && (
+                    <fieldset className="space-y-3 border-t border-white/10 pt-3">
+                      <legend className="text-xs font-semibold text-white/70">Biaya untuk setiap hari tambahan</legend>
+                      <div className="flex flex-wrap gap-4 text-xs text-white/70">
+                        <label className="flex items-center gap-2"><input type="radio" name="charge-extra-day" checked={!chargeExtraDay} onChange={() => setChargeExtraDay(false)} className="accent-amber-500" />Tanpa biaya tambahan</label>
+                        <label className="flex items-center gap-2"><input type="radio" name="charge-extra-day" checked={chargeExtraDay} onChange={() => setChargeExtraDay(true)} className="accent-amber-500" />Ada biaya tambahan</label>
+                      </div>
+                      {chargeExtraDay && <input type="number" min="1" value={extraDayPrice} onChange={(event) => setExtraDayPrice(event.target.value)} placeholder="Harga tambahan per hari (Rp)" className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-white outline-none transition-all focus:border-amber-500" required />}
+                    </fieldset>
+                  )}
+                </section>
                 <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Deskripsi singkat..." rows={3} className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white outline-none focus:border-amber-500 transition-all resize-none" />
             </div>
 

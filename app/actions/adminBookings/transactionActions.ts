@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { calculatePackageTotal } from "@/lib/package-event-pricing";
 import { 
   supabaseAdmin, getErrorMessage, parseEventDetails, parseProcessMeta, 
   mergeProcessMetaAsNotes, mergeBookingNotesPatch, STORAGE_BUCKET, BookingProcessMeta, requireAdmin, requireAdminOrSales
@@ -30,7 +31,7 @@ export async function createAdminBookingAction(payload: any) {
     // 1. Ambil detail Paket Utama untuk Snapshot (Nama, Harga, Tipe)
     const { data: mainPkg, error: mainPkgError } = await supabaseAdmin
       .from("packages")
-      .select("name, price, type")
+      .select("name, price, type, allow_extra_days, extra_day_price")
       .eq("id", payload.package_id)
       .single();
 
@@ -83,7 +84,14 @@ export async function createAdminBookingAction(payload: any) {
       .insert({
         booking_id: booking.id,
         user_id: ownerId,
-        total_amount: payload.total_price, // Diambil dari total kalkulasi di form admin
+        total_amount: mainPkg
+          ? calculatePackageTotal(
+              mainPkg.price,
+              mainPkg.extra_day_price,
+              Array.isArray(payload.event_details) ? payload.event_details.length : 1,
+              mainPkg.allow_extra_days !== false
+            ) + addonSnapshots.reduce((sum, addon) => sum + Number(addon.price || 0), 0)
+          : Number(payload.total_price || 0),
         dp_amount: 0,
         paid_amount: 0,
         payment_status: "unpaid",

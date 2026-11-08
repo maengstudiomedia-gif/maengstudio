@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Download, ImageIcon, Loader2, Sparkles, X } from "lucide-react";
 import { getPackageCategoryLabel } from "@/lib/package-categories";
+import { getPackagePriceUnit } from "@/lib/package-price";
 
 interface PackagePosterModalProps {
   pkg: Record<string, unknown>;
@@ -39,13 +40,14 @@ function buildPosterSvg(pkg: Record<string, unknown>, fields: [string, unknown][
   const price = typeof pkg.price === "number"
     ? new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(pkg.price)
     : formatValue(pkg.price);
+  const priceUnit = escapeXml(getPackagePriceUnit(pkg.price_unit));
   return `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1080" height="1080" viewBox="0 0 1080 1080">
     <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#101318"/><stop offset="1" stop-color="${soft}"/></linearGradient></defs>
     <rect width="1080" height="1080" fill="url(#bg)"/><circle cx="950" cy="80" r="210" fill="${accent}" opacity=".12"/>
     ${imageUrl ? `<image href="${imageUrl}" x="70" y="70" width="940" height="510" preserveAspectRatio="xMidYMid slice"/><rect x="70" y="70" width="940" height="510" fill="#000" opacity=".2"/>` : "<rect x=\"70\" y=\"70\" width=\"940\" height=\"510\" rx=\"24\" fill=\"#20252c\"/>"}
     <text x="90" y="635" fill="${accent}" font-size="24" font-weight="700" letter-spacing="3">${category.toUpperCase()}</text>
     <text x="90" y="710" fill="#fff" font-size="62" font-weight="800">${name.slice(0, 28)}</text>
-    <text x="90" y="780" fill="${accent}" font-size="38" font-weight="700">${escapeXml(price)}</text>
+    <text x="90" y="780" fill="${accent}" font-size="38" font-weight="700">${escapeXml(price)} / ${priceUnit}</text>
     <text x="90" y="845" fill="#e6e0d6" font-size="24">${escapeXml(formatValue(pkg.description).slice(0, 62))}</text>
     <line x1="90" y1="895" x2="990" y2="895" stroke="${accent}" opacity=".45"/>
     <text x="90" y="960" fill="#fff" font-size="24" font-weight="700">DETAIL PAKET</text>

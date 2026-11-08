@@ -153,20 +153,28 @@ export function mergeProcessMetaAsNotes(existingNotes: unknown, process: Booking
     } catch {}
   } else if (existingNotes && typeof existingNotes === "object") {
     base = existingNotes as Record<string, unknown>;
+  function parseNotesBase(existingNotes: unknown): Record<string, unknown> {
+    if (typeof existingNotes === "string") {
+      try {
+        const parsed = JSON.parse(existingNotes) as unknown;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          return parsed as Record<string, unknown>;
+        }
+        if (typeof parsed === "string" && parsed.trim()) return { customer_notes: parsed };
+      } catch {
+        if (existingNotes.trim()) return { customer_notes: existingNotes };
+      }
+    } else if (existingNotes && typeof existingNotes === "object" && !Array.isArray(existingNotes)) {
+      return existingNotes as Record<string, unknown>;
+    }
+    return {};
   }
-  return JSON.stringify({ ...base, process });
-}
 
-/** Gabung field top-level notes (addon, dp_paid_amount, dll.) tanpa menghapus process */
-export function mergeBookingNotesPatch(existingNotes: unknown, patch: Record<string, unknown>): string {
-  let base: Record<string, unknown> = {};
-  if (existingNotes && typeof existingNotes === "string") {
-    try {
-      const parsed = JSON.parse(existingNotes) as unknown;
+  }
+    const base = parseNotesBase(existingNotes);
       if (parsed && typeof parsed === "object") base = parsed as Record<string, unknown>;
     } catch {}
   } else if (existingNotes && typeof existingNotes === "object") {
     base = existingNotes as Record<string, unknown>;
   }
-  return JSON.stringify({ ...base, ...patch });
-}
+    const base = parseNotesBase(existingNotes);

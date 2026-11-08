@@ -4,6 +4,7 @@
 import { useState } from "react";
 import { CheckCircle2, Trash2, Edit, Package, Plus, Sparkles } from "lucide-react";
 import { getPackageCategoryLabel } from "@/lib/package-categories";
+import { getPackagePriceUnit } from "@/lib/package-price";
 import PackagePosterModal from "./PackagePosterModal";
 
 interface PackageProps {
@@ -46,6 +47,8 @@ export default function PackageCard({ pkg, onEdit, onDelete, onBooking }: Packag
       <p className="text-amber-500 font-black text-xl mb-4">
         {new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(pkg.price)}
       </p>
+      <p className="-mt-3 mb-4 text-xs text-white/45">{getPackagePriceUnit(pkg.price_unit)}</p>
+      <p className="-mt-3 mb-4 text-xs text-white/45">{pkg.allow_extra_days === false ? "Tidak mengizinkan tambahan hari" : Number(pkg.extra_day_price || 0) > 0 ? `Hari tambahan: ${new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 }).format(Number(pkg.extra_day_price))}/hari` : "Hari tambahan tanpa biaya"}</p>
 
       {/* Area Detail (Fitur & Cetakan) dengan flex-1 agar tombol aksi terdorong ke bawah */}
       <div className="flex-1 flex flex-col mb-6">

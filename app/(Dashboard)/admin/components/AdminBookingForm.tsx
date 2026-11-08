@@ -5,6 +5,8 @@ import { createPortal } from "react-dom";
 import { X, Save, Plus, Trash2, Loader2, Calendar, MapPin, Clock, CheckCircle2, Package as PackageIcon } from "lucide-react";
 import { generateInvoiceNumberAction, createAdminBookingAction } from "@/app/actions/adminBookings";
 import { getPackageCategoryLabel } from "@/lib/package-categories";
+import { getPackagePriceUnit } from "@/lib/package-price";
+import { calculatePackageTotal } from "@/lib/package-event-pricing";
 import { extractDateKeysFromEventDetails } from "@/lib/bookingCalendar/extractDateKeysFromEventDetails";
 import { validateBookingEventDatesAction } from "@/app/actions/bookingCalendarActions";
 import AlertModal from "./AlertModal";
@@ -60,12 +62,17 @@ export default function AdminBookingForm({ userId, selectedPackage, allPackages 
   }, [allPackages, selectedPackage]);
 
   const totalAmount = useMemo(() => {
-    const basePrice = Number(selectedPackage?.price) || 0;
+    const basePrice = calculatePackageTotal(
+      selectedPackage?.price,
+      selectedPackage?.extra_day_price,
+      events.length,
+      selectedPackage?.allow_extra_days !== false
+    );
     const addonPrice = allPackages
       .filter(pkg => selectedAddonIds.includes(pkg.id))
       .reduce((acc, curr) => acc + (Number(curr.price) || 0), 0);
     return basePrice + addonPrice;
-  }, [selectedPackage, selectedAddonIds, allPackages]);
+  }, [selectedPackage, selectedAddonIds, allPackages, events.length]);
 
   const toggleAddon = (id: string) => {
     setSelectedAddonIds(prev => prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]);
@@ -180,6 +187,8 @@ export default function AdminBookingForm({ userId, selectedPackage, allPackages 
 
         <h5 className="text-sm font-bold text-white mb-1 leading-tight line-clamp-1">{pkg.name}</h5>
         <p className="text-amber-500 font-bold text-sm mb-3">{formatRupiah(pkg.price)}</p>
+        <p className="-mt-2 mb-3 text-[10px] text-white/45">{getPackagePriceUnit(pkg.price_unit)}</p>
+        <p className="-mt-2 mb-3 text-[10px] text-white/45">{pkg.allow_extra_days === false ? "Tidak mengizinkan tambahan hari" : Number(pkg.extra_day_price || 0) > 0 ? `Hari tambahan ${formatRupiah(Number(pkg.extra_day_price))}/hari` : "Hari tambahan tanpa biaya"}</p>
 
         {/* Tiny Features */}
         <div className="space-y-1 mt-auto">

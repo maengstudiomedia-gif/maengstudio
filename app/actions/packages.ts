@@ -63,6 +63,15 @@ export async function createPackageAction(formData: FormData) {
     const type = formData.get("type") as string;
     const name = formData.get("name") as string;
     const price = Number(formData.get("price"));
+    const price_unit = String(formData.get("price_unit") || "").trim();
+    if (!price_unit) return { success: false, error: "Satuan harga wajib diisi." };
+    const allow_extra_days = formData.get("allow_extra_days") === "true";
+    const extra_day_price = allow_extra_days && formData.get("charge_extra_day") === "true"
+      ? Number(formData.get("extra_day_price"))
+      : 0;
+    if (!Number.isFinite(extra_day_price) || extra_day_price < 0 || (allow_extra_days && formData.get("charge_extra_day") === "true" && extra_day_price === 0)) {
+      return { success: false, error: "Harga tambahan per hari tidak valid." };
+    }
     const description = formData.get("description") as string;
     const is_popular = formData.get("is_popular") === "true";
     const features = JSON.parse(formData.get("features") as string);
@@ -85,6 +94,9 @@ export async function createPackageAction(formData: FormData) {
         type,
         name,
         price,
+        price_unit,
+        allow_extra_days,
+        extra_day_price,
         description,
         is_popular,
         features,
@@ -118,6 +130,15 @@ export async function updatePackageAction(formData: FormData) {
     const type = formData.get("type") as string;
     const name = formData.get("name") as string;
     const price = Number(formData.get("price"));
+    const price_unit = String(formData.get("price_unit") || "").trim();
+    if (!price_unit) return { success: false, error: "Satuan harga wajib diisi." };
+    const allow_extra_days = formData.get("allow_extra_days") === "true";
+    const extra_day_price = allow_extra_days && formData.get("charge_extra_day") === "true"
+      ? Number(formData.get("extra_day_price"))
+      : 0;
+    if (!Number.isFinite(extra_day_price) || extra_day_price < 0 || (allow_extra_days && formData.get("charge_extra_day") === "true" && extra_day_price === 0)) {
+      return { success: false, error: "Harga tambahan per hari tidak valid." };
+    }
     const description = formData.get("description") as string;
     const is_popular = formData.get("is_popular") === "true";
     const features = JSON.parse(formData.get("features") as string);
@@ -130,6 +151,9 @@ export async function updatePackageAction(formData: FormData) {
       type,
       name,
       price,
+      price_unit,
+      allow_extra_days,
+      extra_day_price,
       description,
       is_popular,
       features,
