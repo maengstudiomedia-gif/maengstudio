@@ -136,7 +136,7 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
       const uploadData = new FormData();
       uploadData.append("image", preparedImage);
       const result = await uploadPackageImageAction(uploadData);
-      if (!result.success) {
+      if (!result.success || !result.imageUrl) {
         setMessage({ type: "error", text: result.error || "Gagal mengupload gambar paket." });
         return;
       }
