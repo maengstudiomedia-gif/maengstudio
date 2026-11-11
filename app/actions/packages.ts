@@ -164,9 +164,8 @@ export async function updatePackageAction(formData: FormData) {
     const imageFile = formData.get("image") as File | null;
     if (imageFile && imageFile.size > 0) {
       const image_url = await uploadImage(imageFile);
-      if (image_url) {
-        updateData.image_url = image_url; // Hanya timpa gambar jika gambar baru berhasil diupload
-      }
+      if (!image_url) return { success: false, error: "Gagal mengupload gambar paket. Silakan coba lagi." };
+      updateData.image_url = image_url;
     }
 
     // 4. Update data di Database
