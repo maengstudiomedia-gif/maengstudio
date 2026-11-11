@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom"; // IMPORT BARU
 import { Save, Loader2, X, Upload, Images, FileImage, FolderOpen } from "lucide-react";
-import { createPackageAction, updatePackageAction } from "@/app/actions/packages";
+import { createPackageAction, updatePackageAction, uploadPackageImageAction } from "@/app/actions/packages";
 import { PACKAGE_CATEGORIES, getPackageCategoryValue, type PackageCategory } from "@/lib/package-categories";
 
 interface PackageFormProps {
@@ -12,12 +12,58 @@ interface PackageFormProps {
   onCancel: () => void;
 }
 
+const MAX_PACKAGE_IMAGE_SIZE = 700 * 1024;
+
+async function preparePackageImage(file: File): Promise<File> {
+  const image = await createImageBitmap(file);
+  try {
+    const canvas = document.createElement("canvas");
+    const scale = Math.min(1, 1600 / Math.max(image.width, image.height));
+    let width = Math.max(1, Math.round(image.width * scale));
+    let height = Math.max(1, Math.round(image.height * scale));
+    let quality = 0.82;
+
+    for (let attempt = 0; attempt < 8; attempt++) {
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("Browser tidak dapat memproses gambar.");
+      context.drawImage(image, 0, 0, width, height);
+
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/webp", quality));
+      if (!blob) throw new Error("Gambar tidak dapat diproses.");
+      if (blob.size <= MAX_PACKAGE_IMAGE_SIZE) {
+        const extension = blob.type === "image/webp" ? "webp" : "png";
+        const fileName = `${file.name.replace(/\.[^.]+$/, "")}.${extension}`;
+        return new File([blob], fileName, { type: blob.type });
+      }
+
+      if (quality > 0.62) quality -= 0.1;
+      else {
+        width = Math.max(1, Math.round(width * 0.8));
+        height = Math.max(1, Math.round(height * 0.8));
+        quality = 0.78;
+      }
+    }
+
+    throw new Error("Ukuran gambar terlalu besar untuk diunggah. Pilih gambar lain.");
+  } finally {
+    image.close();
+  }
+}
+
 export default function PackageForm({ initialData, onSuccess, onCancel }: PackageFormProps) {
-  // STATE BARU: Untuk memastikan portal hanya berjalan di sisi Client (Browser)
+  const imagePreviewObjectUrl = useRef<string | null>(null);
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+    return () => {
+      if (imagePreviewObjectUrl.current) URL.revokeObjectURL(imagePreviewObjectUrl.current);
+    };
+  }, []);
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const albumInputRef = useRef<HTMLInputElement>(null);
@@ -43,6 +89,8 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
 
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(initialData?.image_url || null);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+  const [removeImage, setRemoveImage] = useState(false);
 
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>, source: "album" | "file" | "folder") => {
     const selectedFiles = Array.from(event.target.files || []);
@@ -56,7 +104,11 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
       return;
     }
     setImageFile(file);
-    setImagePreview(URL.createObjectURL(file));
+    if (imagePreviewObjectUrl.current) URL.revokeObjectURL(imagePreviewObjectUrl.current);
+    imagePreviewObjectUrl.current = URL.createObjectURL(file);
+    setImagePreview(imagePreviewObjectUrl.current);
+    setUploadedImageUrl(null);
+    setRemoveImage(false);
     setMessage({
       type: "success",
       text: source === "folder" ? `Folder dipilih. Menggunakan gambar pertama: ${file.name}` : `Gambar dipilih: ${file.name}`,
@@ -64,8 +116,51 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
     event.target.value = "";
   };
 
+  const handleRemoveImage = () => {
+    if (imagePreviewObjectUrl.current) URL.revokeObjectURL(imagePreviewObjectUrl.current);
+    imagePreviewObjectUrl.current = null;
+    setImageFile(null);
+    setImagePreview(null);
+    setUploadedImageUrl(null);
+    setRemoveImage(Boolean(editingId && (initialData?.image_url || uploadedImageUrl)));
+    setMessage({ type: "success", text: "Foto akan dihapus setelah perubahan disimpan." });
+  };
+
+  const handleImageUpload = async () => {
+    if (!imageFile) return;
+    setIsUploading(true);
+    setMessage({ type: "success", text: "Menyiapkan gambar untuk diunggah..." });
+
+    try {
+      const preparedImage = await preparePackageImage(imageFile);
+      const uploadData = new FormData();
+      uploadData.append("image", preparedImage);
+      const result = await uploadPackageImageAction(uploadData);
+      if (!result.success) {
+        setMessage({ type: "error", text: result.error || "Gagal mengupload gambar paket." });
+        return;
+      }
+
+      if (imagePreviewObjectUrl.current) URL.revokeObjectURL(imagePreviewObjectUrl.current);
+      imagePreviewObjectUrl.current = null;
+      setImageFile(null);
+      setUploadedImageUrl(result.imageUrl);
+      setImagePreview(result.imageUrl);
+      setRemoveImage(false);
+      setMessage({ type: "success", text: "Gambar berhasil diunggah. Klik Simpan Perubahan untuk menerapkan." });
+    } catch (error) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Gagal memproses gambar." });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingId && imageFile) {
+      setMessage({ type: "error", text: "Klik Unggah terlebih dahulu sebelum menyimpan perubahan." });
+      return;
+    }
     setIsLoading(true);
     setMessage({ type: "", text: "" });
 
@@ -87,13 +182,25 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
     formData.append("is_popular", isPopular.toString());
     formData.append("features", JSON.stringify(features.filter(f => f.trim() !== "")));
     if (type === "dokumentasi") formData.append("print_results", JSON.stringify(printResults.filter(p => p.trim() !== "")));
-    if (imageFile) formData.append("image", imageFile);
-    if (editingId) formData.append("id", editingId);
+    if (editingId) {
+      formData.append("id", editingId);
+      formData.append("remove_image", String(removeImage && !uploadedImageUrl));
+      if (uploadedImageUrl) formData.append("image_url", uploadedImageUrl);
+    } else if (imageFile) {
+      formData.append("image", imageFile);
+    }
 
-    const result = editingId ? await updatePackageAction(formData) : await createPackageAction(formData);
-
-    if (result.success) onSuccess();
-    else { setMessage({ type: "error", text: result.error || "Gagal menyimpan paket." }); setIsLoading(false); }
+    try {
+      const result = editingId ? await updatePackageAction(formData) : await createPackageAction(formData);
+      if (result.success) onSuccess();
+      else {
+        setMessage({ type: "error", text: result.error || "Gagal menyimpan paket." });
+        setIsLoading(false);
+      }
+    } catch (error) {
+      setMessage({ type: "error", text: error instanceof Error ? error.message : "Gagal menyimpan paket." });
+      setIsLoading(false);
+    }
   };
 
   // ISI KONTEN MODAL KITA
@@ -146,7 +253,7 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
                           <button type="button" onClick={() => fileInputRef.current?.click()} className="flex-1 rounded-lg bg-black/70 px-2 py-2 text-[10px] font-bold text-white backdrop-blur-sm transition hover:bg-amber-500 hover:text-black">File</button>
                           <button type="button" onClick={() => folderInputRef.current?.click()} className="flex-1 rounded-lg bg-black/70 px-2 py-2 text-[10px] font-bold text-white backdrop-blur-sm transition hover:bg-amber-500 hover:text-black">Folder</button>
                         </div>
-                        <button type="button" onClick={() => {setImageFile(null); setImagePreview(null);}} className="absolute top-2 right-2 bg-red-500 p-1.5 rounded-full hover:bg-red-600 transition-colors shadow-lg">
+                        <button type="button" onClick={handleRemoveImage} aria-label="Hapus foto paket" className="absolute top-2 right-2 bg-red-500 p-1.5 rounded-full hover:bg-red-600 transition-colors shadow-lg">
                           <X className="w-4 h-4 text-white" />
                         </button>
                       </div>
@@ -160,6 +267,17 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
                           <button type="button" onClick={() => folderInputRef.current?.click()} className="flex flex-col items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-2 py-3 text-[10px] text-white/60 transition hover:border-amber-500 hover:text-amber-400"><FolderOpen className="h-5 w-5" />Folder</button>
                         </div>
                       </div>
+                    )}
+                    {editingId && imageFile && (
+                      <button
+                        type="button"
+                        onClick={handleImageUpload}
+                        disabled={isUploading}
+                        className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-amber-500 px-4 py-3 text-sm font-bold text-black transition hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                        {isUploading ? "Mengunggah..." : "Unggah Foto"}
+                      </button>
                     )}
                     <input
                       type="file"
@@ -234,7 +352,7 @@ export default function PackageForm({ initialData, onSuccess, onCancel }: Packag
                 )}
 
                 <div className="pt-6 mt-4 border-t border-white/5">
-                  <button type="submit" disabled={isLoading} className="w-full bg-amber-500 hover:bg-amber-400 py-4 rounded-xl font-bold text-black flex items-center justify-center transition-all shadow-[0_0_20px_rgba(245,158,11,0.2)]">
+                  <button type="submit" disabled={isLoading || isUploading} className="w-full bg-amber-500 hover:bg-amber-400 py-4 rounded-xl font-bold text-black flex items-center justify-center transition-all shadow-[0_0_20px_rgba(245,158,11,0.2)]">
                     {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5 mr-2" /> {editingId ? "Simpan Perubahan" : "Simpan Paket"}</>}
                   </button>
                 </div>

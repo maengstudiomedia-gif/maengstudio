@@ -43,6 +43,31 @@ async function uploadImage(file: File): Promise<string | null> {
   }
 }
 
+function isPackageImageUrl(url: string) {
+  const { data } = supabaseAdmin.storage.from(STORAGE_BUCKET).getPublicUrl("packages/");
+  return url.startsWith(data.publicUrl);
+}
+
+export async function uploadPackageImageAction(formData: FormData) {
+  try {
+    await requireAdmin();
+    const file = formData.get("image");
+    if (!file || typeof file === "string" || !file.type.startsWith("image/")) {
+      return { success: false, error: "File yang dipilih harus berupa gambar." };
+    }
+    if (file.size > 750 * 1024) {
+      return { success: false, error: "Ukuran gambar masih terlalu besar. Silakan pilih gambar lain." };
+    }
+
+    const imageUrl = await uploadImage(file);
+    if (!imageUrl) return { success: false, error: "Gagal mengupload gambar paket. Silakan coba lagi." };
+    return { success: true, imageUrl };
+  } catch (error: any) {
+    console.error("Upload Package Image Error:", error);
+    return { success: false, error: error.message || "Gagal mengupload gambar paket." };
+  }
+}
+
 
 // FUNGSI UNTUK KLIEN: Mengambil semua paket
 export async function getPackagesAction() {
@@ -160,12 +185,14 @@ export async function updatePackageAction(formData: FormData) {
       print_results
     };
 
-    // 3. Cek apakah admin mengupload gambar baru
-    const imageFile = formData.get("image") as File | null;
-    if (imageFile && imageFile.size > 0) {
-      const image_url = await uploadImage(imageFile);
-      if (!image_url) return { success: false, error: "Gagal mengupload gambar paket. Silakan coba lagi." };
-      updateData.image_url = image_url;
+    const imageUrl = String(formData.get("image_url") || "").trim();
+    if (imageUrl) {
+      if (!isPackageImageUrl(imageUrl)) {
+        return { success: false, error: "URL gambar paket tidak valid." };
+      }
+      updateData.image_url = imageUrl;
+    } else if (formData.get("remove_image") === "true") {
+      updateData.image_url = null;
     }
 
     // 4. Update data di Database
