@@ -12,7 +12,7 @@ import {
   hasServiceAccountDriveConfig,
 } from "@/lib/google-drive";
 import { HARD_ALBUM_LIMIT, getAlbumLabel, normalizeAlbumMaxPhotos } from "@/lib/album-types";
-import { supabaseAdmin, mergeBookingNotesPatch, requireAdmin } from "@/app/actions/adminBookings/utils";
+import { supabaseAdmin, mergeBookingNotesPatch, parseProcessMeta, requireAdmin } from "@/app/actions/adminBookings/utils";
 
 type DrivePhoto = {
   id: string;
@@ -40,6 +40,7 @@ type SortirNotes = {
   count?: number;
   mode?: string;
   portalToken?: string;
+  isLocked?: boolean;
 };
 
 export type SortirSession = {
@@ -52,6 +53,7 @@ export type SortirSession = {
   clientName: string | null;
   maxPhotos: number | null;
   albumType: string | null;
+  isLocked: boolean;
 };
 
 const HARD_LIMIT = HARD_ALBUM_LIMIT;
@@ -80,6 +82,10 @@ function parseSortirNotes(notes: unknown): SortirNotes | null {
   return sortir as SortirNotes;
 }
 
+function isSortirLocked(notes: unknown): boolean {
+  return ["print_process", "completed", "picked_up"].includes(parseProcessMeta(notes).stage);
+}
+
 async function requirePortalNotes(bookingId: string, portalToken: string): Promise<SortirNotes> {
   if (!portalToken || portalToken.length < 32) {
     throw new Error("Akses portal tidak valid.");
@@ -98,6 +104,7 @@ async function requirePortalNotes(bookingId: string, portalToken: string): Promi
     throw new Error("Akses portal tidak valid atau sudah kedaluwarsa.");
   }
 
+  notes.isLocked = isSortirLocked(booking?.notes);
   return notes;
 }
 
@@ -455,6 +462,9 @@ export async function submitClientSelectionAction(
 ): Promise<{ success: boolean; message?: string }> {
   try {
     const sortirNotes = await requirePortalNotes(bookingId, portalToken);
+    if (sortirNotes.isLocked) {
+      return { success: false, message: "Pilihan foto sudah dikunci karena pesanan sedang dicetak." };
+    }
     const sourceFolderId = sortirNotes.sourceFolderId;
     const allowedMaxPhotos = normalizeMaxPhotos(sortirNotes.maxPhotos ?? maxPhotos, sortirNotes.albumType);
     if (!sourceFolderId) throw new Error("Folder sumber portal belum dikonfigurasi.");
@@ -553,6 +563,7 @@ export async function getSortirSessionAction(
       clientName: sortirNotes?.clientName ?? null,
       maxPhotos: normalizeMaxPhotos(sortirNotes?.maxPhotos, sortirNotes?.albumType),
       albumType: sortirNotes?.albumType ?? null,
+      isLocked: Boolean(sortirNotes.isLocked),
     };
   } catch (error) {
     console.error("Gagal mengambil sesi sortir:", error);
@@ -573,6 +584,7 @@ export async function savePendingSelectionAction(
       .eq("id", bookingId)
       .single();
 
+    if (isSortirLocked(booking?.notes)) return { success: false };
     const existing = parseSortirNotes(booking?.notes) ?? {};
 
     const notes = mergeBookingNotesPatch(booking?.notes, {
@@ -589,6 +601,14 @@ export async function savePendingSelectionAction(
     console.error("Gagal menyimpan pilihan sementara:", error);
     return { success: false };
   }
+}
+
+export async function getSortirLockStatusAction(
+  bookingId: string,
+  portalToken: string
+): Promise<{ isLocked: boolean }> {
+  const session = await requirePortalNotes(bookingId, portalToken);
+  return { isLocked: Boolean(session.isLocked) };
 }
 
 export async function persistPortalConfigAction(
@@ -664,6 +684,9 @@ export async function moveSinglePhotoAction(
 }> {
   try {
     const session = await getSortirSessionAction(bookingId, portalToken);
+    if (session.isLocked) {
+      return { success: false, message: "Pilihan foto sudah dikunci karena pesanan sedang dicetak." };
+    }
     const clientName = session.clientName || "Klien";
     const originalFolderLink = session.driveLink;
     const maxPhotos = normalizeMaxPhotos(session.maxPhotos, session.albumType);
@@ -742,6 +765,9 @@ export async function revertMovedPhotoAction(
 }> {
   try {
     const session = await getSortirSessionAction(bookingId, portalToken);
+    if (session.isLocked) {
+      return { success: false, message: "Foto tidak dapat diubah karena pesanan sedang dicetak." };
+    }
     const clientName = session.clientName || "Klien";
     const originalFolderLink = session.driveLink;
     const maxPhotos = normalizeMaxPhotos(session.maxPhotos, session.albumType);

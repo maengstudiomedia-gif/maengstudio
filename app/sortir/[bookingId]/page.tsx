@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import {
   getPhotosFromDriveAction,
+  getSortirLockStatusAction,
   getSortirSessionAction,
   moveSinglePhotoAction,
   revertMovedPhotoAction,
@@ -88,6 +89,7 @@ export default function ClientGalleryPortal({
   const [photoFilter, setPhotoFilter] = useState<PhotoFilter>("all");
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [pendingSaveStatus, setPendingSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [isLocked, setIsLocked] = useState(false);
 
   const maxPhotos = resolvedMaxPhotos;
   const albumLabel = getAlbumLabel(resolvedAlbumType);
@@ -147,6 +149,7 @@ export default function ClientGalleryPortal({
     const session = await getSortirSessionAction(bookingId, portalToken);
     setMovedPhotos(session.movedPhotos);
     setMovedFileIds(session.movedFileIds);
+    setIsLocked(session.isLocked);
     if (session.moveStatus === "completed") {
       setIsSuccess(true);
     }
@@ -177,6 +180,7 @@ export default function ClientGalleryPortal({
         setResolvedMaxPhotos(max);
         setMovedPhotos(session.movedPhotos);
         setMovedFileIds(session.movedFileIds);
+        setIsLocked(session.isLocked);
 
         const restoredPending = session.pendingFileIds.filter(
           (id) => !session.movedFileIds.includes(id)
@@ -226,7 +230,7 @@ export default function ClientGalleryPortal({
   }, [bookingId, portalToken, galleryRetry]);
 
   useEffect(() => {
-    if (!sessionLoaded || isSubmitting) return;
+    if (!sessionLoaded || isSubmitting || isLocked) return;
 
     let active = true;
     setPendingSaveStatus("saving");
@@ -241,10 +245,28 @@ export default function ClientGalleryPortal({
       active = false;
       window.clearTimeout(timer);
     };
-  }, [selectedIds, bookingId, portalToken, sessionLoaded, isSubmitting]);
+  }, [selectedIds, bookingId, portalToken, sessionLoaded, isSubmitting, isLocked]);
+
+  useEffect(() => {
+    if (!sessionLoaded) return;
+    const checkLock = async () => {
+      try {
+        const status = await getSortirLockStatusAction(bookingId, portalToken);
+        setIsLocked(status.isLocked);
+      } catch (error) {
+        console.error("Gagal memeriksa status sortir:", error);
+      }
+    };
+    const intervalId = window.setInterval(() => void checkLock(), 15000);
+    window.addEventListener("focus", checkLock);
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", checkLock);
+    };
+  }, [bookingId, portalToken, sessionLoaded]);
 
   const togglePhotoSelection = (id: string) => {
-    if (movedFileIds.includes(id)) return;
+    if (isLocked || movedFileIds.includes(id)) return;
 
     const isSelecting = !selectedIds.includes(id);
     const currentCommitted = movedCount + selectedIds.length;
@@ -307,6 +329,7 @@ export default function ClientGalleryPortal({
   };
 
   const runSubmit = async () => {
+    if (isLocked) return;
     const idsToMove = [...selectedIds];
     const initialMovedCount = movedFileIds.length;
     setIsSubmitting(true);
@@ -371,6 +394,7 @@ export default function ClientGalleryPortal({
   };
 
   const handleSubmit = () => {
+    if (isLocked) return;
     if (selectedIds.length === 0) {
       setErrorMessage("Pilih minimal 1 foto terlebih dahulu.");
       return;
@@ -385,7 +409,7 @@ export default function ClientGalleryPortal({
   };
 
   const confirmDenseSelection = () => {
-    if (!pendingSelectionId) return;
+    if (!pendingSelectionId || isLocked) return;
     setSelectedIds((prev) => [...prev, pendingSelectionId]);
     setPendingSelectionId(null);
   };
@@ -395,6 +419,7 @@ export default function ClientGalleryPortal({
   };
 
   const handleRevert = async (fileId: string) => {
+    if (isLocked) return;
     setRevertingId(fileId);
     setConfirmRevertId(null);
     try {
@@ -460,6 +485,7 @@ export default function ClientGalleryPortal({
               Terima kasih, {clientName}. Foto di bawah ini sudah dipilih untuk {albumLabel} Anda
               (maksimal {maxPhotos} foto).
             </p>
+            {isLocked && <p className="mx-auto mt-3 max-w-lg rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-xs text-amber-100">Pilihan foto dikunci karena pesanan sedang dicetak.</p>}
             <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
               <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-5 py-3">
                 <p className="text-2xl font-semibold text-emerald-300">{movedCount}</p>
@@ -509,13 +535,13 @@ export default function ClientGalleryPortal({
             )}
           </div>
 
-          <button
+          {!isLocked && <button
             type="button"
             onClick={() => setIsSuccess(false)}
             className="mt-6 w-full rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-3 text-sm font-medium text-emerald-100 transition-colors hover:bg-emerald-500/15"
           >
             Tambah atau Ganti Foto
-          </button>
+          </button>}
         </div>
 
         {zoomedPhoto && (
@@ -605,6 +631,8 @@ export default function ClientGalleryPortal({
         </div>
       </div>
 
+      {isLocked && <div className="mx-4 mt-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100 md:mx-8">Pesanan sedang dicetak. Pilihan foto tidak dapat ditambah, dibatalkan, atau diganti.</div>}
+
       {movedCount > 0 && (
         <div className="px-4 md:px-8 pt-4">
           <button
@@ -618,7 +646,7 @@ export default function ClientGalleryPortal({
                   {movedCount} foto sudah dipindahkan
                 </p>
                 <p className="text-[11px] text-white/40">
-                  Ketuk untuk lihat atau kembalikan ke folder asli
+                  {isLocked ? "Foto pilihan Anda" : "Ketuk untuk melihat atau mengembalikan foto"}
                 </p>
               </div>
             </div>
@@ -668,14 +696,14 @@ export default function ClientGalleryPortal({
                     >
                       <Eye className="h-3.5 w-3.5" />
                     </button>
-                    <button
+                    {!isLocked && <button
                       type="button"
                       onClick={() => togglePhotoSelection(photo.id)}
                       className="rounded-lg bg-rose-500/80 p-1.5 text-white transition-colors hover:bg-rose-500"
                       aria-label={`Batal pilih ${photo.name}`}
                     >
                       <X className="h-3.5 w-3.5" />
-                    </button>
+                    </button>}
                   </div>
                 </div>
               ))}
@@ -824,9 +852,9 @@ export default function ClientGalleryPortal({
                       <button
                         type="button"
                         onClick={() => togglePhotoSelection(photo.id)}
-                        disabled={isMoved}
+                        disabled={isMoved || isLocked}
                         className={`flex flex-col items-center justify-center gap-0.5 backdrop-blur-md text-[9px] font-medium py-2 rounded-lg transition-colors ${
-                          isMoved
+                          isMoved || isLocked
                             ? "bg-white/10 text-white/40 cursor-not-allowed"
                             : isSelected
                               ? "bg-amber-500 text-black hover:bg-amber-400"
@@ -834,7 +862,7 @@ export default function ClientGalleryPortal({
                         }`}
                       >
                         <Check className="w-3.5 h-3.5" />
-                        {isMoved ? "Sudah dipindah" : isSelected ? "Batal" : "Pilih"}
+                        {isMoved ? "Sudah dipindah" : isLocked ? "Terkunci" : isSelected ? "Batal" : "Pilih"}
                       </button>
                     </div>
                   </div>
@@ -849,10 +877,12 @@ export default function ClientGalleryPortal({
         <div className="max-w-md mx-auto pointer-events-auto space-y-3">
           <button
             onClick={handleSubmit}
-            disabled={isSubmitting || selectedIds.length === 0}
+            disabled={isLocked || isSubmitting || selectedIds.length === 0}
             className="w-full bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium py-4 rounded-2xl shadow-xl transition-all flex justify-center items-center gap-2"
           >
-            {isSubmitting ? (
+            {isLocked ? (
+              <>Pesanan sedang dicetak · sortir dikunci</>
+            ) : isSubmitting ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" /> Memindahkan...
               </>
@@ -867,7 +897,7 @@ export default function ClientGalleryPortal({
               </>
             )}
           </button>
-          {shouldWarnDenseAlbum && (
+          {shouldWarnDenseAlbum && !isLocked && (
             <div className="rounded-2xl border border-white/10 bg-white/5 p-3 text-sm text-white/75">
               <p className="font-medium text-white/90">Perhatian: Album akan sangat padat.</p>
               <p className="mt-1 text-white/60">
@@ -972,10 +1002,10 @@ export default function ClientGalleryPortal({
                           )}
                           Unduh
                         </button>
-                        <button
+                        {!isLocked && <button
                           type="button"
                           onClick={() => setConfirmRevertId(photo.id)}
-                          disabled={revertingId === photo.id || isSubmitting}
+                          disabled={revertingId === photo.id || isSubmitting || isLocked}
                           className="flex items-center justify-center gap-1 bg-rose-500/20 hover:bg-rose-500/80 disabled:opacity-50 text-rose-200 hover:text-white text-[9px] py-1.5 rounded-lg transition-colors backdrop-blur-sm"
                         >
                           {revertingId === photo.id ? (
@@ -984,7 +1014,7 @@ export default function ClientGalleryPortal({
                             <Undo2 className="w-3 h-3" />
                           )}
                           Batal
-                        </button>
+                        </button>}
                       </div>
                     </div>
                   </div>
@@ -1053,7 +1083,7 @@ export default function ClientGalleryPortal({
               Unduh Foto
             </button>
 
-            {!movedFileIds.includes(zoomedPhoto.id) && (
+            {!isLocked && !movedFileIds.includes(zoomedPhoto.id) && (
               <button
                 type="button"
                 onClick={() => {
@@ -1091,7 +1121,7 @@ export default function ClientGalleryPortal({
       />
 
       <AlertModal
-        isOpen={!!pendingSelectionId && maxPhotos > DENSE_ALBUM_THRESHOLD}
+        isOpen={!isLocked && !!pendingSelectionId && maxPhotos > DENSE_ALBUM_THRESHOLD}
         title="Peringatan Album Padat"
         message="Anda sudah mencapai 100 foto. Desain album akan sangat padat dan ukuran tiap foto bisa menjadi kecil. Apakah Anda ingin melanjutkan menambahkan foto ini?"
         variant="error"
@@ -1101,7 +1131,7 @@ export default function ClientGalleryPortal({
         onCancel={cancelDenseSelection}
       />
 
-      {confirmRevertId && (
+      {confirmRevertId && !isLocked && (
         <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="w-full max-w-md bg-[#111] border border-white/10 rounded-3xl p-6 space-y-5 shadow-2xl">
             <div className="space-y-2">
