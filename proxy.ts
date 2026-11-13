@@ -10,6 +10,10 @@ const redis = new Redis({
 });
 
 export async function proxy(request: NextRequest) {
+  const isEmbeddedSortirPortal =
+    request.nextUrl.pathname.startsWith("/sortir/") &&
+    request.nextUrl.searchParams.get("embed") === "1";
+
   // 1. Ekstrak dan set custom headers (berasal dari middleware lama)
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-pathname", request.nextUrl.pathname);
@@ -22,7 +26,7 @@ export async function proxy(request: NextRequest) {
   // Fungsi pembantu untuk memasang header keamanan
   const setSecurityHeaders = (res: NextResponse) => {
     res.headers.set("X-Content-Type-Options", "nosniff");
-    res.headers.set("X-Frame-Options", "DENY");
+    res.headers.set("X-Frame-Options", isEmbeddedSortirPortal ? "SAMEORIGIN" : "DENY");
     res.headers.set("X-XSS-Protection", "1; mode=block");
     res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
     res.headers.set(
