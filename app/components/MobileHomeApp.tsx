@@ -539,6 +539,14 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
       setNotice(result.message || "Pesanan belum dapat dibuat. Periksa kembali tanggal acara.");
       return;
     }
+    if (!result.payment) {
+      setCartIds((current) => current.filter((id) => id !== String(selectedPackage.id)));
+      setSelectedPackage(null);
+      setNotice("Pesanan berhasil dibuat, tetapi detail pembayaran tidak tersedia. Periksa Pesanan saya atau hubungi admin.");
+      setView("active");
+      void loadBookings();
+      return;
+    }
     setPaymentDetails({
       amount: result.payment.amount,
       transferCode: result.payment.transferCode,
