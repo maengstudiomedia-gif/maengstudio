@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import BookingMonthGrid, { type DayCellMeta } from "./BookingMonthGrid";
 import { buildAdminCalendarDayEntries } from "@/lib/bookingCalendar/buildAdminCalendarDayEntries";
 
-type Row = { id: string; client_name?: string | null; event_details?: unknown };
+type Row = { id: string; client_name?: string | null; event_details?: unknown; status?: string | null };
 
 export default function AdminBookingCalendarPanel({ bookings }: { bookings: Row[] }) {
   const [cursor, setCursor] = useState(() => {
@@ -14,7 +14,8 @@ export default function AdminBookingCalendarPanel({ bookings }: { bookings: Row[
   });
 
   const byDate = useMemo(() => {
-    const entries = buildAdminCalendarDayEntries(bookings);
+    const activeBookings = bookings.filter((booking) => booking.status !== "cancelled" && booking.status !== "canceled");
+    const entries = buildAdminCalendarDayEntries(activeBookings);
     const m = new Map<string, DayCellMeta>();
     for (const e of entries) {
       m.set(e.date, { count: e.count, full: e.full, clientNames: e.clientNames });

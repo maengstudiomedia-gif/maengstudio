@@ -47,6 +47,9 @@ export async function generateInvoiceNumberAction() {
 export async function getAdminBookingsAction() {
   try {
     await requireAdmin();
+    const { error: expirationError } = await supabaseAdmin.rpc("expire_overdue_bookings");
+    if (expirationError) throw new Error(expirationError.message);
+
     const [{ data: bookings, error: bookingError }, { data: invoices, error: invoiceError }, { data: packages }, { data: profiles }] = await Promise.all([
       supabaseAdmin.from("bookings").select("*").order("created_at", { ascending: false }),
       supabaseAdmin.from("invoices").select("*").order("created_at", { ascending: false }),

@@ -26,6 +26,7 @@ export default function AdminBookingsTable() {
   const [isLoading, setIsLoading] = useState(true);
   const [bookings, setBookings] = useState<BookingRow[]>([]);
   const [keyword, setKeyword] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "cancelled">("all");
   
   const [editing, setEditing] = useState<BookingRow | null>(null);
   const [pickupTarget, setPickupTarget] = useState<BookingRow | null>(null);
@@ -83,10 +84,17 @@ export default function AdminBookingsTable() {
     setIsLoading(false);
   }
 
+  const cancelledCount = useMemo(
+    () => bookings.filter((row) => row.status === "cancelled" || row.status === "canceled").length,
+    [bookings]
+  );
   const filteredBookings = useMemo(() => {
     const q = keyword.trim().toLowerCase();
-    if (!q) return bookings;
     return bookings.filter((row) => {
+      const isCancelled = row.status === "cancelled" || row.status === "canceled";
+      if (statusFilter === "cancelled" && !isCancelled) return false;
+      if (statusFilter === "active" && isCancelled) return false;
+      if (!q) return true;
       const invoice = String(row.invoice_number || "").toLowerCase();
       const client = String(row.client_name || "").toLowerCase();
       const phone = String(row.client_phone || "").toLowerCase();
@@ -94,7 +102,7 @@ export default function AdminBookingsTable() {
       const addonHit = (row.addon_packages || []).some((a) => String(a.name || "").toLowerCase().includes(q));
       return invoice.includes(q) || client.includes(q) || phone.includes(q) || pkg.includes(q) || addonHit;
     });
-  }, [bookings, keyword]);
+  }, [bookings, keyword, statusFilter]);
 
   function handleDelete(id: string) {
     showConfirm("Apakah Anda yakin ingin menghapus pesanan ini secara permanen?", async () => {
@@ -119,6 +127,30 @@ export default function AdminBookingsTable() {
             placeholder="Cari nomor nota / klien / paket..."
             className="w-full bg-black/40 border border-white/10 rounded-xl py-2.5 pl-10 pr-4 text-sm text-white outline-none focus:border-rose-500"
           />
+        </div>
+        <div role="tablist" aria-label="Filter status pesanan" className="mt-4 flex flex-wrap gap-2">
+          {([
+            { value: "all", label: "Semua", count: bookings.length },
+            { value: "active", label: "Pesanan aktif", count: bookings.length - cancelledCount },
+            { value: "cancelled", label: "Dibatalkan", count: cancelledCount },
+          ] as const).map((filter) => (
+            <button
+              key={filter.value}
+              type="button"
+              role="tab"
+              aria-selected={statusFilter === filter.value}
+              onClick={() => setStatusFilter(filter.value)}
+              className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                statusFilter === filter.value
+                  ? filter.value === "cancelled"
+                    ? "border-red-400/40 bg-red-500/15 text-red-300"
+                    : "border-amber-400/40 bg-amber-500/15 text-amber-300"
+                  : "border-white/10 bg-white/[0.03] text-white/50 hover:text-white/80"
+              }`}
+            >
+              {filter.label} ({filter.count})
+            </button>
+          ))}
         </div>
       </div>
 

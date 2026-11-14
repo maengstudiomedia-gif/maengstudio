@@ -16,7 +16,7 @@ async function fetchBookingsForCalendar() {
     .select("id, client_name, event_details, status");
   if (error) throw new Error(error.message);
   return (data || [])
-    .filter((booking) => booking.status !== "cancelled")
+    .filter((booking) => booking.status !== "cancelled" && booking.status !== "canceled")
     .map(({ id, client_name, event_details }) => ({ id, client_name, event_details }));
 }
 

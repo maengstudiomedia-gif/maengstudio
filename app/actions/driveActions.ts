@@ -93,11 +93,21 @@ async function requirePortalNotes(bookingId: string, portalToken: string): Promi
 
   const { data: booking, error } = await supabaseAdmin
     .from("bookings")
-    .select("notes")
+    .select("notes, package_id")
     .eq("id", bookingId)
     .single();
 
   if (error) throw new Error("Booking portal tidak ditemukan.");
+
+  const { data: packageRow, error: packageError } = await supabaseAdmin
+    .from("packages")
+    .select("type")
+    .eq("id", booking.package_id)
+    .maybeSingle();
+  if (packageError) throw new Error("Gagal memeriksa kategori paket sortir.");
+  if (String(packageRow?.type || "").trim().toLowerCase() !== "dokumentasi") {
+    throw new Error("Sortir foto hanya tersedia untuk pesanan kategori dokumentasi.");
+  }
 
   const notes = parseSortirNotes(booking?.notes);
   if (!notes?.portalToken || notes.portalToken !== portalToken) {

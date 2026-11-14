@@ -336,6 +336,7 @@ export default function AdminDashboardPage() {
               id: b.id,
               client_name: b.client_name,
               event_details: b.event_details,
+              status: b.status,
             }))}
           />
 

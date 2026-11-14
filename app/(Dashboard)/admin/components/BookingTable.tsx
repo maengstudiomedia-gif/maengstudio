@@ -82,6 +82,7 @@ export default function BookingTable({
           const canEnterPrintStage = isFullyPaid && stage === "edit_process";
           const canFinish = isFullyPaid && stage === "print_process";
           const canMarkPicked = isFullyPaid && stage === "completed";
+          const isCancelled = row.status === "cancelled" || row.status === "canceled";
 
           return (
             <tr key={row.id} className="border-b border-white/5 hover:bg-white/[0.02]">
@@ -141,15 +142,20 @@ export default function BookingTable({
               <td className="px-4 py-3">
                 <span
                   className={`px-2 py-1 rounded-full text-[10px] uppercase font-bold border ${
-                    row.status === "completed"
+                    isCancelled
+                      ? "text-red-300 border-red-500/20 bg-red-500/10"
+                      : row.status === "completed"
                       ? "text-emerald-400 border-emerald-500/20 bg-emerald-500/10"
                       : row.status === "locked"
                         ? "text-blue-400 border-blue-500/20 bg-blue-500/10"
                         : "text-amber-400 border-amber-500/20 bg-amber-500/10"
                   }`}
                 >
-                  {row.status || "-"}
+                  {isCancelled ? "Dibatalkan" : row.status || "-"}
                 </span>
+                {invoice.payment_status === "expired" && (
+                  <p className="mt-1 text-[10px] font-medium text-red-300/80">Otomatis · waktu pembayaran habis</p>
+                )}
               </td>
 
               <td className="px-4 py-3">
@@ -167,14 +173,14 @@ export default function BookingTable({
               <td className="px-4 py-3">
                 <div className="flex flex-col gap-1.5 w-full">
                   {/* Jika belum lunas dan belum bayar DP, munculkan tombol Bayar DP */}
-                  {!hasDp && !isFullyPaid && (
+                  {!isCancelled && !hasDp && !isFullyPaid && (
                     <button onClick={() => onPayDp(row)} className="w-full px-2 py-1.5 rounded-md bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 text-[10px] font-bold text-center">
                       BAYAR DP
                     </button>
                   )}
                   
                   {/* Jika sudah bayar DP (tapi belum lunas), munculkan Edit DP dan Pelunasan */}
-                  {hasDp && !isFullyPaid && (
+                  {!isCancelled && hasDp && !isFullyPaid && (
                     <>
                       <button onClick={() => onEditDp(row)} className="w-full px-2 py-1.5 rounded-md bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 text-[10px] font-bold text-center">
                         EDIT DP
@@ -186,7 +192,7 @@ export default function BookingTable({
                   )}
 
                   {/* Jika sudah lunas, sembunyikan semua tombol dan beri label LUNAS */}
-                  {isFullyPaid && (
+                  {!isCancelled && isFullyPaid && (
                     <div className="w-full py-1.5 text-center text-[11px] font-black tracking-widest text-emerald-500/50 bg-emerald-500/5 rounded-md border border-emerald-500/10">
                       LUNAS
                     </div>
@@ -196,16 +202,16 @@ export default function BookingTable({
 
               <td className="px-4 py-3">
                 <div className="flex gap-1.5">
-                  <button onClick={() => onStartEdit(row)} disabled={!canStartEdit} title="Mulai proses edit" className={`p-2 rounded-lg ${canStartEdit ? "bg-white/5 hover:bg-white/10 text-white" : "text-white/10 cursor-not-allowed"}`}>
+                  <button onClick={() => onStartEdit(row)} disabled={isCancelled || !canStartEdit} title="Mulai proses edit" className={`p-2 rounded-lg ${!isCancelled && canStartEdit ? "bg-white/5 hover:bg-white/10 text-white" : "text-white/10 cursor-not-allowed"}`}>
                     <Pencil className="w-4 h-4" />
                   </button>
-                  <button onClick={() => onEnterPrintStage(row)} disabled={!canEnterPrintStage} title="Masuk tahap percetakan" className={`p-2 rounded-lg ${canEnterPrintStage ? "bg-violet-500/10 hover:bg-violet-500/20 text-violet-300" : "text-violet-900/40 cursor-not-allowed"}`}>
+                  <button onClick={() => onEnterPrintStage(row)} disabled={isCancelled || !canEnterPrintStage} title="Masuk tahap percetakan" className={`p-2 rounded-lg ${!isCancelled && canEnterPrintStage ? "bg-violet-500/10 hover:bg-violet-500/20 text-violet-300" : "text-violet-900/40 cursor-not-allowed"}`}>
                     <Factory className="w-4 h-4" />
                   </button>
-                  <button onClick={() => onFinish(row)} disabled={!canFinish} title="Selesaikan percetakan" className={`p-2 rounded-lg ${canFinish ? "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300" : "text-emerald-900/40 cursor-not-allowed"}`}>
+                  <button onClick={() => onFinish(row)} disabled={isCancelled || !canFinish} title="Selesaikan percetakan" className={`p-2 rounded-lg ${!isCancelled && canFinish ? "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300" : "text-emerald-900/40 cursor-not-allowed"}`}>
                     <CheckCircle2 className="w-4 h-4" />
                   </button>
-                  <button onClick={() => onMarkPickedUp(row)} disabled={!canMarkPicked} title="Tandai diambil" className={`p-2 rounded-lg ${canMarkPicked ? "bg-amber-500/10 hover:bg-amber-500/20 text-amber-300" : "text-amber-900/40 cursor-not-allowed"}`}>
+                  <button onClick={() => onMarkPickedUp(row)} disabled={isCancelled || !canMarkPicked} title="Tandai diambil" className={`p-2 rounded-lg ${!isCancelled && canMarkPicked ? "bg-amber-500/10 hover:bg-amber-500/20 text-amber-300" : "text-amber-900/40 cursor-not-allowed"}`}>
                     <Upload className="w-4 h-4" />
                   </button>
                 </div>

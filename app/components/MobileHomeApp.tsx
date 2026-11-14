@@ -18,6 +18,7 @@ import {
   MapPin,
   Mic2,
   Minus,
+  Pin,
   Package,
   Plus,
   Search,
@@ -579,6 +580,7 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
   const selectedPackageInfo = selectedBooking
     ? packages.find((item) => String(item.id) === String(selectedBooking.package_id))
     : null;
+  const isDocumentationBooking = String(selectedPackageInfo?.type || "").trim().toLowerCase() === "dokumentasi";
   const selectedEvents = selectedBooking ? parseEventDetails(selectedBooking.event_details) : [];
   const customerNote = getCustomerNoteText(selectedBooking?.notes);
   const invoiceTotal = Number(selectedInvoice?.total_amount || 0);
@@ -752,8 +754,9 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
                 return (
                   <article key={booking.id} role="button" tabIndex={0} aria-label={`Lihat detail pesanan ${booking.client_name || booking.id}`} onClick={() => setSelectedBooking(booking)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setSelectedBooking(booking); } }} className="cursor-pointer rounded-[16px] border border-[#e3ebe5] bg-white p-4 text-left transition hover:border-[#9bc9aa] hover:shadow-[0_6px_18px_rgba(24,39,31,0.07)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#087b45]">
                     {invoice?.payment_status === "expired" && (
-                      <div className="-mx-4 -mt-4 mb-3 rounded-t-[16px] bg-[#fff0ee] px-4 py-3 text-[11px] font-semibold text-[#b4453c]">
-                        Batas waktu pembayaran habis. Pesanan ini dibatalkan.
+                      <div className="-mx-4 -mt-4 mb-3 flex items-center gap-2 rounded-t-[16px] bg-[#fff0ee] px-4 py-3 text-[11px] font-semibold text-[#b4453c]">
+                        <Pin className="h-3.5 w-3.5 shrink-0" />
+                        <span>Dibatalkan otomatis karena batas waktu pembayaran habis.</span>
                       </div>
                     )}
                     {awaitingInitialPayment && remainingPaymentTime > 0 && (
@@ -768,7 +771,7 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
                         Batas waktu pembayaran habis. Pesanan sedang diperbarui.
                       </div>
                     )}
-                    <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-[#809087]">{getPackageCategoryLabel(bookingPackage?.type || "Paket acara")}</p><h3 className="mt-1 text-sm font-bold">{String(firstEvent?.eventName || "Pesanan layanan")}</h3><p className="mt-1 text-[11px] text-[#718078]">{bookingPackage?.name || "Paket acara"}</p></div><div className="shrink-0 text-right"><p className="text-[9px] font-semibold uppercase tracking-wide text-[#819087]">Status</p><span className="mt-1 inline-block rounded-full bg-[#fff3df] px-2.5 py-1 text-[9px] font-bold text-[#a76114]">{getBookingStatusLabel(booking.status)}</span>{getBookingProcessLabel(booking.notes) && <p className="mt-1 max-w-[130px] text-[9px] font-semibold text-[#087b45]">{getBookingProcessLabel(booking.notes)}</p>}</div></div>
+                    <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-[#809087]">{getPackageCategoryLabel(bookingPackage?.type || "Paket acara")}</p><h3 className="mt-1 text-sm font-bold">{String(firstEvent?.eventName || "Pesanan layanan")}</h3><p className="mt-1 text-[11px] text-[#718078]">{bookingPackage?.name || "Paket acara"}</p></div><div className="shrink-0 text-right"><p className="text-[9px] font-semibold uppercase tracking-wide text-[#819087]">Status</p><span className={`mt-1 inline-block rounded-full px-2.5 py-1 text-[9px] font-bold ${booking.status === "cancelled" ? "bg-[#fff0ee] text-[#b4453c]" : "bg-[#fff3df] text-[#a76114]"}`}>{getBookingStatusLabel(booking.status)}</span>{getBookingProcessLabel(booking.notes) && <p className="mt-1 max-w-[130px] text-[9px] font-semibold text-[#087b45]">{getBookingProcessLabel(booking.notes)}</p>}</div></div>
                     {firstEvent && <div className="mt-3 space-y-1.5 border-t border-[#edf1ee] pt-3 text-[11px] text-[#718078]"><p className="flex items-center gap-2"><CalendarDays className="h-3.5 w-3.5 text-[#087b45]" />{formatOrderDate(firstEvent.date)} {firstEvent.startTime || firstEvent.time ? `· ${String(firstEvent.startTime || firstEvent.time)}` : ""}</p><p className="flex items-start gap-2"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#087b45]" />{String(firstEvent.address || "Lokasi belum tersedia")}</p></div>}
                     {invoice && <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[#edf1ee] pt-3 text-[11px]"><div><p className="text-[#819087]">Pilihan pembayaran</p><p className="mt-0.5 font-semibold">{paymentPlan}</p></div><div><p className="text-[#819087]">Metode</p><p className="mt-0.5 font-semibold">{invoice.payment_method === "cash" ? "Tunai" : invoice.payment_method === "transfer" ? "QRIS" : "Belum dipilih"}</p></div><div><p className="text-[#819087]">Nominal pembayaran awal</p><p className="mt-0.5 font-semibold text-[#087b45]">{formatRupiah(initialPayment)}</p></div>{transferCode > 0 && <div><p className="text-[#819087]">{invoice.payment_plan === "full" ? "Biaya admin (kode unik)" : "Kode unik QRIS"}</p><p className="mt-0.5 font-semibold">{String(transferCode).padStart(3, "0")}</p></div>}<div><p className="text-[#819087]">Sudah dibayar</p><p className="mt-0.5 font-semibold">{formatRupiah(paidAmount)}</p></div>{invoice.payment_plan !== "full" && <div><p className="text-[#819087]">Pelunasan setelah DP</p><p className="mt-0.5 font-semibold">{formatRupiah(expectedSettlement)}</p></div>}</div>}
                     {invoice && remainingBalance > 0 && <p className="mt-3 rounded-[10px] bg-[#f3f7f4] px-3 py-2 text-[10px] text-[#627168]">Sisa pembayaran: <strong>{formatRupiah(remainingBalance)}</strong></p>}
@@ -862,22 +865,24 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
                 )}
               </section>
 
-              <section className="overflow-hidden rounded-[15px] border border-[#dce9df] bg-white">
-                <div className="border-b border-[#edf1ee] p-4">
-                  <h3 className="text-xs font-bold">Sortir foto untuk dicetak</h3>
-                  <p className="mt-1 text-[11px] leading-relaxed text-[#718078]">Pilih foto sesuai kuota dan ketentuan album. Pilihan Anda tersimpan otomatis.</p>
-                </div>
-                {getSortirPortalToken(selectedBooking.notes) ? (
-                  <iframe
-                    key={String(selectedBooking.id)}
-                    title="Sortir foto pesanan"
-                    src={`/sortir/${encodeURIComponent(String(selectedBooking.id))}?token=${encodeURIComponent(getSortirPortalToken(selectedBooking.notes))}&embed=1`}
-                    className="h-[75vh] min-h-[600px] w-full bg-[#0a0a0a]"
-                  />
-                ) : (
-                  <p className="p-4 text-xs leading-relaxed text-[#819087]">Link sortir foto belum tersedia. Admin akan mengirimkan link setelah folder Google Drive disiapkan.</p>
-                )}
-              </section>
+              {isDocumentationBooking && (
+                <section className="overflow-hidden rounded-[15px] border border-[#dce9df] bg-white">
+                  <div className="border-b border-[#edf1ee] p-4">
+                    <h3 className="text-xs font-bold">Sortir foto untuk dicetak</h3>
+                    <p className="mt-1 text-[11px] leading-relaxed text-[#718078]">Pilih foto sesuai kuota dan ketentuan album. Pilihan Anda tersimpan otomatis.</p>
+                  </div>
+                  {getSortirPortalToken(selectedBooking.notes) ? (
+                    <iframe
+                      key={String(selectedBooking.id)}
+                      title="Sortir foto pesanan"
+                      src={`/sortir/${encodeURIComponent(String(selectedBooking.id))}?token=${encodeURIComponent(getSortirPortalToken(selectedBooking.notes))}&embed=1`}
+                      className="h-[75vh] min-h-[600px] w-full bg-[#0a0a0a]"
+                    />
+                  ) : (
+                    <p className="p-4 text-xs leading-relaxed text-[#819087]">Link sortir foto belum tersedia. Admin akan mengirimkan link setelah folder Google Drive disiapkan.</p>
+                  )}
+                </section>
+              )}
 
               {customerNote && <section className="rounded-[14px] border border-[#e1e9e3] bg-white p-4"><h3 className="text-xs font-bold">Catatan pesanan</h3><p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-[#718078]">{customerNote}</p></section>}
 
