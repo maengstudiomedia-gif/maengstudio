@@ -203,9 +203,7 @@ export async function createNewBookingAction(payload: any) {
     payment: {
       amount: calculateInitialPaymentAmount(totalPrice, dpAmount, paymentPlan, paymentMethod, invoiceResult.transferCode),
       transferCode: paymentMethod === "transfer" ? invoiceResult.transferCode : null,
-      settlementAmount: paymentPlan === "dp" && paymentMethod === "transfer"
-        ? calculateExpectedSettlement(totalPrice, dpAmount, invoiceResult.transferCode)
-        : paymentPlan === "dp" ? totalPrice - dpAmount : 0,
+      settlementAmount: paymentPlan === "dp" ? calculateExpectedSettlement(totalPrice, dpAmount) : 0,
     },
   };
 }
@@ -295,9 +293,7 @@ export async function createPublicBookingAction(payload: any) {
     payment: {
       amount: calculateInitialPaymentAmount(totalPrice, dpAmount, paymentPlan, paymentMethod, invoiceResult.transferCode),
       transferCode: paymentMethod === "transfer" ? invoiceResult.transferCode : null,
-      settlementAmount: paymentPlan === "dp" && paymentMethod === "transfer"
-        ? calculateExpectedSettlement(totalPrice, dpAmount, invoiceResult.transferCode)
-        : paymentPlan === "dp" ? totalPrice - dpAmount : 0,
+      settlementAmount: paymentPlan === "dp" ? calculateExpectedSettlement(totalPrice, dpAmount) : 0,
     },
   };
 }

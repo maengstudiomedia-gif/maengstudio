@@ -7,10 +7,14 @@ import { getPublicQrisAction } from "@/app/actions/qrisActions";
 export default function PaymentAccounts({
   amount,
   theme = "light",
+  paymentPlan,
+  transferCode,
   showConfirmation = false,
 }: {
   amount: number;
   theme?: "dark" | "light";
+  paymentPlan?: "dp" | "full";
+  transferCode?: number | null;
   showConfirmation?: boolean;
 }) {
   const isDark = theme === "dark";
@@ -82,6 +86,13 @@ export default function PaymentAccounts({
             <p className={`text-xs ${isDark ? "text-white/55" : "text-[#718078]"}`}>Nominal yang harus dibayar</p>
             <p className={`mt-1 text-lg font-bold ${isDark ? "text-amber-300" : "text-[#087b45]"}`}>{formatRupiah(amount)}</p>
           </div>
+          {transferCode && paymentPlan && (
+            <p className={`text-[11px] leading-relaxed ${isDark ? "text-white/55" : "text-[#718078]"}`}>
+              {paymentPlan === "full"
+                ? `Kode unik ${String(transferCode).padStart(3, "0")} merupakan biaya administrasi QRIS.`
+                : `Kode unik ${String(transferCode).padStart(3, "0")} digunakan sebagai pembeda dan memudahkan pengecekan. Pelunasan setelah DP tetap sebesar sisa harga paket.`}
+            </p>
+          )}
         </>
       ) : (
         <p className={`rounded-xl border p-3 text-xs ${isDark ? "border-white/10 text-white/55" : "border-[#e8eee9] text-[#718078]"}`}>

@@ -9,6 +9,6 @@ export function calculateInitialPaymentAmount(
   return baseAmount + (paymentMethod === "transfer" ? Math.max(transferCode, 0) : 0);
 }
 
-export function calculateExpectedSettlement(totalAmount: number, dpAmount: number, transferCode: number) {
-  return Math.max(totalAmount - dpAmount - Math.max(transferCode, 0), 0);
+export function calculateExpectedSettlement(totalAmount: number, dpAmount: number) {
+  return Math.max(totalAmount - dpAmount, 0);
 }

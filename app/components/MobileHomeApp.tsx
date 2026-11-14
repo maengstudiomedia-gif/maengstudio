@@ -574,7 +574,9 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
   const initialPaymentTarget = selectedInitialPayment;
   const remainingInitialPayment = invoicePaid < initialPaymentTarget
     ? Math.max(initialPaymentTarget - invoicePaid, 0)
-    : Math.max(invoiceTotal - invoicePaid, 0);
+    : selectedInvoice?.payment_plan === "full"
+      ? 0
+      : Math.max(invoiceTotal - Math.max(invoicePaid - selectedTransferCode, 0), 0);
   const needsInitialPayment = Boolean(selectedInvoice)
     && selectedInvoice?.payment_status !== "paid"
     && remainingInitialPayment > 0;
@@ -711,7 +713,12 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
                 );
                 const expectedSettlement = invoice?.payment_plan === "full"
                   ? 0
-                  : calculateExpectedSettlement(totalAmount, minimumDp, transferCode);
+                  : calculateExpectedSettlement(totalAmount, minimumDp);
+                const remainingBalance = invoice?.payment_status === "paid"
+                  ? 0
+                  : invoice?.payment_plan === "full"
+                    ? Math.max(initialPayment - paidAmount, 0)
+                    : Math.max(totalAmount - Math.max(paidAmount - transferCode, 0), 0);
                 const paymentDeadline = Date.parse(String(invoice?.payment_expires_at || ""));
                 const awaitingInitialPayment = booking.status === "pending_payment"
                   && (invoice?.payment_method === "cash" || invoice?.payment_method === "transfer")
@@ -740,8 +747,8 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
                     )}
                     <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] font-bold uppercase tracking-wide text-[#809087]">{getPackageCategoryLabel(bookingPackage?.type || "Paket acara")}</p><h3 className="mt-1 text-sm font-bold">{String(firstEvent?.eventName || "Pesanan layanan")}</h3><p className="mt-1 text-[11px] text-[#718078]">{bookingPackage?.name || "Paket acara"}</p></div><div className="shrink-0 text-right"><p className="text-[9px] font-semibold uppercase tracking-wide text-[#819087]">Status</p><span className="mt-1 inline-block rounded-full bg-[#fff3df] px-2.5 py-1 text-[9px] font-bold text-[#a76114]">{getBookingStatusLabel(booking.status)}</span>{getBookingProcessLabel(booking.notes) && <p className="mt-1 max-w-[130px] text-[9px] font-semibold text-[#087b45]">{getBookingProcessLabel(booking.notes)}</p>}</div></div>
                     {firstEvent && <div className="mt-3 space-y-1.5 border-t border-[#edf1ee] pt-3 text-[11px] text-[#718078]"><p className="flex items-center gap-2"><CalendarDays className="h-3.5 w-3.5 text-[#087b45]" />{formatOrderDate(firstEvent.date)} {firstEvent.startTime || firstEvent.time ? `· ${String(firstEvent.startTime || firstEvent.time)}` : ""}</p><p className="flex items-start gap-2"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#087b45]" />{String(firstEvent.address || "Lokasi belum tersedia")}</p></div>}
-                    {invoice && <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[#edf1ee] pt-3 text-[11px]"><div><p className="text-[#819087]">Pilihan pembayaran</p><p className="mt-0.5 font-semibold">{paymentPlan}</p></div><div><p className="text-[#819087]">Metode</p><p className="mt-0.5 font-semibold">{invoice.payment_method === "cash" ? "Tunai" : invoice.payment_method === "transfer" ? "QRIS" : "Belum dipilih"}</p></div><div><p className="text-[#819087]">Nominal pembayaran awal</p><p className="mt-0.5 font-semibold text-[#087b45]">{formatRupiah(initialPayment)}</p></div>{transferCode > 0 && <div><p className="text-[#819087]">Kode pembeda QRIS</p><p className="mt-0.5 font-semibold">{String(transferCode).padStart(3, "0")}</p></div>}<div><p className="text-[#819087]">Sudah dibayar</p><p className="mt-0.5 font-semibold">{formatRupiah(paidAmount)}</p></div>{invoice.payment_plan !== "full" && <div><p className="text-[#819087]">Pelunasan setelah DP</p><p className="mt-0.5 font-semibold">{formatRupiah(expectedSettlement)}</p></div>}</div>}
-                    {invoice && paidAmount < totalAmount && <p className="mt-3 rounded-[10px] bg-[#f3f7f4] px-3 py-2 text-[10px] text-[#627168]">Sisa pembayaran: <strong>{formatRupiah(Math.max(totalAmount - paidAmount, 0))}</strong></p>}
+                    {invoice && <div className="mt-3 grid grid-cols-2 gap-2 border-t border-[#edf1ee] pt-3 text-[11px]"><div><p className="text-[#819087]">Pilihan pembayaran</p><p className="mt-0.5 font-semibold">{paymentPlan}</p></div><div><p className="text-[#819087]">Metode</p><p className="mt-0.5 font-semibold">{invoice.payment_method === "cash" ? "Tunai" : invoice.payment_method === "transfer" ? "QRIS" : "Belum dipilih"}</p></div><div><p className="text-[#819087]">Nominal pembayaran awal</p><p className="mt-0.5 font-semibold text-[#087b45]">{formatRupiah(initialPayment)}</p></div>{transferCode > 0 && <div><p className="text-[#819087]">{invoice.payment_plan === "full" ? "Biaya admin (kode unik)" : "Kode unik QRIS"}</p><p className="mt-0.5 font-semibold">{String(transferCode).padStart(3, "0")}</p></div>}<div><p className="text-[#819087]">Sudah dibayar</p><p className="mt-0.5 font-semibold">{formatRupiah(paidAmount)}</p></div>{invoice.payment_plan !== "full" && <div><p className="text-[#819087]">Pelunasan setelah DP</p><p className="mt-0.5 font-semibold">{formatRupiah(expectedSettlement)}</p></div>}</div>}
+                    {invoice && remainingBalance > 0 && <p className="mt-3 rounded-[10px] bg-[#f3f7f4] px-3 py-2 text-[10px] text-[#627168]">Sisa pembayaran: <strong>{formatRupiah(remainingBalance)}</strong></p>}
                     {invoice && paidAmount > 0 && paidAmount < totalAmount && <p role="note" className="mt-2 rounded-[10px] border border-[#f1d8a9] bg-[#fff8e9] px-3 py-2 text-[10px] font-semibold leading-relaxed text-[#8b6737]">Pelunasan wajib dilakukan paling lambat H-3 sebelum acara.</p>}
                     <p className="mt-3 border-t border-[#edf1ee] pt-3 text-[10px] font-semibold text-[#087b45]">Lihat seluruh detail pesanan <ChevronRight className="ml-1 inline h-3.5 w-3.5" /></p>
                   </article>
@@ -859,11 +866,11 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
                     <div className="flex justify-between gap-3 text-[#718078]"><span>DP minimum</span><strong className="text-[#18271f]">{formatRupiah(Number(selectedInvoice.dp_amount || Number(selectedInvoice.total_amount || 0) * 0.5))}</strong></div>
                     <div className="flex justify-between gap-3 text-[#718078]"><span>Pilihan pembayaran</span><strong className="text-[#18271f]">{selectedInvoice.payment_plan === "full" ? "All-in" : "DP"}</strong></div>
                     <div className="flex justify-between gap-3 text-[#718078]"><span>Metode</span><strong className="text-[#18271f]">{selectedInvoice.payment_method === "cash" ? "Tunai" : selectedInvoice.payment_method === "transfer" ? "QRIS" : "Belum dipilih"}</strong></div>
-                    {selectedTransferCode > 0 && <div className="flex justify-between gap-3 text-[#718078]"><span>Kode pembeda QRIS</span><strong className="text-[#18271f]">{String(selectedTransferCode).padStart(3, "0")}</strong></div>}
+                    {selectedTransferCode > 0 && <div className="flex justify-between gap-3 text-[#718078]"><span>{selectedInvoice.payment_plan === "full" ? "Biaya admin (kode unik)" : "Kode unik QRIS"}</span><strong className="text-[#18271f]">{String(selectedTransferCode).padStart(3, "0")}</strong></div>}
                     <div className="flex justify-between gap-3 text-[#718078]"><span>Nominal pembayaran awal</span><strong className="text-[#087b45]">{formatRupiah(selectedInitialPayment)}</strong></div>
-                    {selectedInvoice.payment_plan !== "full" && <div className="flex justify-between gap-3 text-[#718078]"><span>Pelunasan setelah DP</span><strong className="text-[#18271f]">{formatRupiah(calculateExpectedSettlement(invoiceTotal, selectedDpAmount, selectedTransferCode))}</strong></div>}
+                    {selectedInvoice.payment_plan !== "full" && <div className="flex justify-between gap-3 text-[#718078]"><span>Pelunasan setelah DP</span><strong className="text-[#18271f]">{formatRupiah(calculateExpectedSettlement(invoiceTotal, selectedDpAmount))}</strong></div>}
                     <div className="flex justify-between gap-3 text-[#718078]"><span>Sudah dibayar</span><strong className="text-[#087b45]">{formatRupiah(Number(selectedInvoice.paid_amount || 0))}</strong></div>
-                    <div className="flex justify-between gap-3 border-t border-[#edf1ee] pt-2 font-bold"><span>Sisa pembayaran</span><span>{formatRupiah(Math.max(Number(selectedInvoice.total_amount || 0) - Number(selectedInvoice.paid_amount || 0), 0))}</span></div>
+                    <div className="flex justify-between gap-3 border-t border-[#edf1ee] pt-2 font-bold"><span>Sisa pembayaran</span><span>{formatRupiah(selectedInvoice.payment_status === "paid" ? 0 : selectedInvoice.payment_plan === "full" ? Math.max(selectedInitialPayment - Number(selectedInvoice.paid_amount || 0), 0) : Math.max(invoiceTotal - Math.max(Number(selectedInvoice.paid_amount || 0) - selectedTransferCode, 0), 0))}</span></div>
                   </div>
                 ) : <p className="mt-2 text-xs text-[#819087]">Rincian invoice belum tersedia.</p>}
               </section>
@@ -880,7 +887,12 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
                     </div>
                   ) : (
                     <div className="mt-3 rounded-[12px] border border-[#f1e4c9] bg-white p-3">
-                      <PaymentAccounts amount={remainingInitialPayment} theme="light" />
+                      <PaymentAccounts
+                        amount={remainingInitialPayment}
+                        theme="light"
+                        paymentPlan={selectedInvoice?.payment_plan === "full" ? "full" : "dp"}
+                        transferCode={selectedTransferCode}
+                      />
                     </div>
                   )}
                   {selectedInvoice?.payment_method !== "cash" && <a href={`https://wa.me/628117873878?text=${encodeURIComponent(`Halo Maeng Studio, saya sudah membayar untuk pesanan ${String(selectedBooking.id)}.`)}`} target="_blank" rel="noreferrer" className="mt-3 inline-flex h-10 items-center justify-center rounded-[10px] bg-[#087b45] px-4 text-xs font-bold text-white">Konfirmasi via WhatsApp</a>}

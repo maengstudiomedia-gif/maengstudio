@@ -281,7 +281,7 @@ export default function BookingPageClient({
           <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 text-sm text-white/75">
             <h2 className="font-semibold text-white">Nominal pembayaran awal</h2>
             <p className="mt-2 text-2xl font-bold text-amber-300">{formatRupiah(paymentSummary.amount)}</p>
-            {paymentSummary.transferCode !== null && <p className="mt-2">Kode pembeda QRIS: <strong className="text-white">{String(paymentSummary.transferCode).padStart(3, "0")}</strong></p>}
+            {paymentSummary.transferCode !== null && <p className="mt-2">{paymentPlan === "full" ? "Biaya admin QRIS" : "Kode unik QRIS untuk pembeda pembayaran"}: <strong className="text-white">{paymentPlan === "full" ? `${formatRupiah(paymentSummary.transferCode)} (kode ${String(paymentSummary.transferCode).padStart(3, "0")})` : String(paymentSummary.transferCode).padStart(3, "0")}</strong></p>}
             {paymentPlan === "dp" && <p className="mt-1 text-xs text-white/55">Sisa pelunasan setelah DP: {formatRupiah(paymentSummary.settlementAmount)}</p>}
           </section>
         )}
@@ -611,6 +611,8 @@ export default function BookingPageClient({
                   <PaymentAccounts
                     amount={paymentSummary?.amount ?? (paymentPlan === "full" ? totalPrice : dpAmount)}
                     theme="dark"
+                    paymentPlan={paymentPlan}
+                    transferCode={paymentSummary?.transferCode}
                     showConfirmation
                   />
                 </div>
