@@ -8,6 +8,7 @@ import { calculatePackageTotal, MAX_BOOKING_EVENT_DAYS } from "@/lib/package-eve
 import { calculateExpectedSettlement, calculateInitialPaymentAmount } from "@/lib/transfer-payment";
 import { getPackagePriceUnit } from "@/lib/package-price";
 import PaymentAccounts from "@/app/components/PaymentAccounts";
+import PaymentLocation from "@/app/components/PaymentLocation";
 import {
   Loader2,
   ArrowRight,
@@ -16,6 +17,7 @@ import {
   Trash2,
   Printer,
   Package,
+  X,
 } from "lucide-react";
 
 interface BookingPageClientProps {
@@ -66,7 +68,14 @@ export default function BookingPageClient({
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "transfer">("transfer");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-  const [paymentSummary, setPaymentSummary] = useState<{ amount: number; transferCode: number | null; settlementAmount: number } | null>(null);
+  const [paymentSummary, setPaymentSummary] = useState<{
+    amount: number;
+    transferCode: number | null;
+    settlementAmount: number;
+    paymentPlan: "dp" | "full";
+    paymentMethod: "cash" | "transfer";
+  } | null>(null);
+  const [paymentModal, setPaymentModal] = useState<{ paymentPlan: "dp" | "full"; paymentMethod: "cash" | "transfer" } | null>(null);
 
   useEffect(() => {
     setName(initialName);
@@ -215,7 +224,8 @@ export default function BookingPageClient({
 
       const result = await createPublicBookingAction(payload as any);
       if (result.success) {
-        setPaymentSummary(result.payment || null);
+        setPaymentSummary(result.payment ? { ...result.payment, paymentPlan, paymentMethod } : null);
+        setPaymentModal({ paymentPlan, paymentMethod });
         setMessage({
           type: "success",
           text:
@@ -281,8 +291,12 @@ export default function BookingPageClient({
           <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 text-sm text-white/75">
             <h2 className="font-semibold text-white">Nominal pembayaran awal</h2>
             <p className="mt-2 text-2xl font-bold text-amber-300">{formatRupiah(paymentSummary.amount)}</p>
-            {paymentSummary.transferCode !== null && <p className="mt-2">{paymentPlan === "full" ? "Biaya admin QRIS" : "Kode unik QRIS untuk pembeda pembayaran"}: <strong className="text-white">{paymentPlan === "full" ? `${formatRupiah(paymentSummary.transferCode)} (kode ${String(paymentSummary.transferCode).padStart(3, "0")})` : String(paymentSummary.transferCode).padStart(3, "0")}</strong></p>}
-            {paymentPlan === "dp" && <p className="mt-1 text-xs text-white/55">Sisa pelunasan setelah DP: {formatRupiah(paymentSummary.settlementAmount)}</p>}
+            {paymentSummary.transferCode !== null && <p className="mt-2">{paymentSummary.paymentPlan === "full" ? "Biaya admin QRIS" : "Kode unik QRIS untuk pembeda pembayaran"}: <strong className="text-white">{paymentSummary.paymentPlan === "full" ? `${formatRupiah(paymentSummary.transferCode)} (kode ${String(paymentSummary.transferCode).padStart(3, "0")})` : String(paymentSummary.transferCode).padStart(3, "0")}</strong></p>}
+            {paymentSummary.paymentPlan === "dp" && <p className="mt-1 text-xs text-white/55">Sisa pelunasan setelah DP: {formatRupiah(paymentSummary.settlementAmount)}</p>}
+            <button type="button" onClick={() => setPaymentModal({ paymentPlan: paymentSummary.paymentPlan, paymentMethod: paymentSummary.paymentMethod })} className="mt-4 inline-flex items-center gap-2 rounded-xl bg-amber-400 px-4 py-2.5 text-xs font-bold text-black hover:bg-amber-300">
+              Lihat instruksi pembayaran
+              <ArrowRight className="h-4 w-4" />
+            </button>
           </section>
         )}
 
@@ -606,23 +620,9 @@ export default function BookingPageClient({
                   </label>
                 </div>
               </fieldset>
-              {paymentMethod === "transfer" ? (
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <PaymentAccounts
-                    amount={paymentSummary?.amount ?? (paymentPlan === "full" ? totalPrice : dpAmount)}
-                    theme="dark"
-                    paymentPlan={paymentPlan}
-                    transferCode={paymentSummary?.transferCode}
-                    showConfirmation
-                  />
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm space-y-2">
-                  <p className="font-medium text-white/80">Pembayaran tunai</p>
-                  <p className="text-xs leading-relaxed text-white/60">Bayar langsung di Galeri Maeng Studio, Jl. Kapten Robani Kadir LRG Maeng No 06 RT 016 RW 004 Kel. Talangputri, Kec. Plaju.</p>
-                  <a href="https://maps.app.goo.gl/j1RSyaHJm1ucJDX19" target="_blank" rel="noreferrer" className="inline-block text-sm text-amber-300 hover:text-amber-200">Buka arah Google Maps</a>
-                </div>
-              )}
+              <p className="rounded-2xl border border-white/10 bg-white/5 p-4 text-xs leading-relaxed text-white/60">
+                Lanjutkan untuk membuat pesanan dan melihat instruksi pembayaran sesuai metode yang dipilih.
+              </p>
             </div>
 
             <button
@@ -636,7 +636,7 @@ export default function BookingPageClient({
                 </>
               ) : (
                 <>
-                  Kirim Booking
+                  Lanjutkan ke pembayaran
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -644,6 +644,49 @@ export default function BookingPageClient({
           </aside>
         </form>
       </div>
+      {paymentModal && paymentSummary && (
+        <div className="fixed inset-0 z-[70] overflow-y-auto bg-black/75 p-4 backdrop-blur-sm sm:grid sm:place-items-center">
+          <section role="dialog" aria-modal="true" aria-labelledby="payment-modal-title" className="mx-auto my-4 w-full max-w-lg overflow-hidden rounded-3xl border border-white/10 bg-[#151515] shadow-2xl sm:my-0">
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-amber-300">Pesanan berhasil dibuat</p>
+                <h2 id="payment-modal-title" className="mt-1 text-lg font-semibold text-white">
+                  {paymentModal.paymentMethod === "transfer" ? "Pembayaran QRIS" : "Pembayaran tunai"}
+                </h2>
+              </div>
+              <button type="button" onClick={() => setPaymentModal(null)} aria-label="Tutup instruksi pembayaran" className="grid h-9 w-9 place-items-center rounded-full text-white/60 hover:bg-white/10 hover:text-white">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-4 p-5">
+              {paymentModal.paymentMethod === "transfer" ? (
+                <>
+                  <PaymentAccounts
+                    amount={paymentSummary.amount}
+                    theme="dark"
+                    paymentPlan={paymentModal.paymentPlan}
+                    transferCode={paymentSummary.transferCode}
+                    showConfirmation
+                  />
+                  {paymentModal.paymentPlan === "dp" && (
+                    <p className="rounded-xl bg-white/5 p-3 text-xs text-white/70">
+                      Sisa pelunasan setelah DP: <strong className="text-amber-300">{formatRupiah(paymentSummary.settlementAmount)}</strong>
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="rounded-xl bg-white/5 p-3 text-xs text-white/70">
+                    Nominal {paymentModal.paymentPlan === "full" ? "All-in" : "DP"}: <strong className="text-amber-300">{formatRupiah(paymentSummary.amount)}</strong>
+                    {paymentModal.paymentPlan === "dp" && <> · Sisa pelunasan: <strong className="text-amber-300">{formatRupiah(paymentSummary.settlementAmount)}</strong></>}
+                  </p>
+                  <PaymentLocation theme="dark" />
+                </>
+              )}
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

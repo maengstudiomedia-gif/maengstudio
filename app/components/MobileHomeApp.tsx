@@ -37,6 +37,7 @@ import { getPackagePriceUnit } from "@/lib/package-price";
 import { calculatePackageTotal, MAX_BOOKING_EVENT_DAYS } from "@/lib/package-event-pricing";
 import { calculateExpectedSettlement, calculateInitialPaymentAmount } from "@/lib/transfer-payment";
 import PaymentAccounts from "@/app/components/PaymentAccounts";
+import PaymentLocation from "@/app/components/PaymentLocation";
 
 const supabase = createBrowserClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -68,6 +69,13 @@ type PackageItem = {
 };
 
 type AppView = "home" | "active" | "cart";
+type BookingPaymentDetails = {
+  amount: number;
+  transferCode: number | null;
+  settlementAmount: number;
+  paymentPlan: "dp" | "full";
+  paymentMethod: "cash" | "transfer";
+};
 
 const categoryIcons: Record<string, typeof Package> = {
   audio: AudioLines,
@@ -215,6 +223,7 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
   const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
   const [packageDetails, setPackageDetails] = useState<PackageItem | null>(null);
   const [selectedPackage, setSelectedPackage] = useState<PackageItem | null>(null);
+  const [paymentDetails, setPaymentDetails] = useState<BookingPaymentDetails | null>(null);
   const [events, setEvents] = useState<EventForm[]>([newEvent()]);
   const [notes, setNotes] = useState("");
   const [clientName, setClientName] = useState("");
@@ -530,12 +539,18 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
       setNotice(result.message || "Pesanan belum dapat dibuat. Periksa kembali tanggal acara.");
       return;
     }
+    setPaymentDetails({
+      amount: result.payment.amount,
+      transferCode: result.payment.transferCode,
+      settlementAmount: result.payment.settlementAmount,
+      paymentPlan,
+      paymentMethod,
+    });
     setCartIds((current) => current.filter((id) => id !== String(selectedPackage.id)));
     setSelectedPackage(null);
-    setNotice("Pesanan berhasil dibuat. Rincian tagihan tersedia di Pesanan saya.");
+    setNotice("");
     setView("active");
     void loadBookings();
-    window.setTimeout(() => setNotice(""), 4000);
   };
 
   const startCheckout = async (item: PackageItem) => {
@@ -1005,25 +1020,55 @@ export default function MobileHomeApp({ initialCategory = "" }: { initialCategor
                     </label>
                   </div>
                 </fieldset>
-                {paymentMethod === "transfer" ? (
-                  <div className="rounded-[10px] bg-[#f3f7f4] p-3">
-                    <PaymentAccounts amount={paymentPlan === "full" ? selectedPackageTotal : selectedPackageTotal * 0.5} theme="light" showConfirmation />
-                  </div>
-                ) : (
-                  <div className="space-y-1 rounded-[10px] bg-[#f3f7f4] p-3 text-[10px] text-[#52645a]">
-                    <p className="font-bold">Bayar langsung di Galeri Maeng Studio.</p>
-                    <p>Jl. Kapten Robani Kadir LRG Maeng No 06 RT 016 RW 004 Kel. Talangputri, Kec. Plaju.</p>
-                  </div>
-                )}
-                {paymentMethod === "cash" && (
-                  <div className="flex items-center justify-between border-t border-[#edf1ee] pt-3 text-xs">
-                    <span className="text-[#718078]">Nominal pembayaran</span>
-                    <strong className="text-[#087b45]">{formatRupiah(paymentPlan === "full" ? selectedPackageTotal : selectedPackageTotal * 0.5)}</strong>
-                  </div>
-                )}
+                <p className="rounded-[10px] bg-[#f3f7f4] p-3 text-[10px] leading-relaxed text-[#627168]">
+                  Lanjutkan untuk melihat instruksi pembayaran sesuai metode yang dipilih.
+                </p>
               </section>
-              <button type="submit" disabled={isSubmitting} className="flex h-11 w-full items-center justify-center gap-2 rounded-[11px] bg-[#087b45] px-5 text-xs font-bold text-white disabled:opacity-60">{isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{isSubmitting ? "Memproses..." : "Konfirmasi pesanan"}</button>
+              <button type="submit" disabled={isSubmitting} className="flex h-11 w-full items-center justify-center gap-2 rounded-[11px] bg-[#087b45] px-5 text-xs font-bold text-white disabled:opacity-60">{isSubmitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{isSubmitting ? "Menyiapkan pembayaran..." : "Lanjutkan ke pembayaran"}</button>
             </form>
+          </section>
+        </div>
+      )}
+      {paymentDetails && (
+        <div className="fixed inset-0 z-[70] overflow-y-auto bg-[#13241b]/65 p-3 backdrop-blur-sm sm:grid sm:place-items-center sm:p-5">
+          <section role="dialog" aria-modal="true" aria-labelledby="payment-title" className="mx-auto my-2 w-full max-w-[500px] overflow-hidden rounded-[20px] bg-[#f7faf8] shadow-2xl sm:my-0">
+            <div className="flex items-center justify-between border-b border-[#e3ebe5] bg-white px-4 py-3.5">
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#087b45]">Pesanan berhasil dibuat</p>
+                <h2 id="payment-title" className="mt-0.5 text-sm font-bold">
+                  {paymentDetails.paymentMethod === "transfer" ? "Pembayaran QRIS" : "Pembayaran tunai"}
+                </h2>
+              </div>
+              <button type="button" onClick={() => setPaymentDetails(null)} aria-label="Tutup instruksi pembayaran" className="grid h-9 w-9 place-items-center rounded-full text-[#8b9990] hover:bg-[#f0f5f1]">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="space-y-4 p-4 sm:p-5">
+              {paymentDetails.paymentMethod === "transfer" ? (
+                <>
+                  <PaymentAccounts
+                    amount={paymentDetails.amount}
+                    theme="light"
+                    paymentPlan={paymentDetails.paymentPlan}
+                    transferCode={paymentDetails.transferCode}
+                    showConfirmation
+                  />
+                  {paymentDetails.paymentPlan === "dp" && (
+                    <p className="rounded-xl bg-[#e9f6ed] p-3 text-xs text-[#52645a]">
+                      Sisa pelunasan setelah DP: <strong className="text-[#087b45]">{formatRupiah(paymentDetails.settlementAmount)}</strong>
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <p className="rounded-xl bg-[#e9f6ed] p-3 text-xs text-[#52645a]">
+                    Nominal {paymentDetails.paymentPlan === "full" ? "All-in" : "DP"}: <strong className="text-[#087b45]">{formatRupiah(paymentDetails.amount)}</strong>
+                    {paymentDetails.paymentPlan === "dp" && <> · Sisa pelunasan: <strong className="text-[#087b45]">{formatRupiah(paymentDetails.settlementAmount)}</strong></>}
+                  </p>
+                  <PaymentLocation />
+                </>
+              )}
+            </div>
           </section>
         </div>
       )}

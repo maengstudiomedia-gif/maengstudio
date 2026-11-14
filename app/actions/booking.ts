@@ -10,15 +10,10 @@ import { validateBookingEventDatesAction, revalidateBookingCalendarPaths } from 
 
 const PAYMENT_WINDOW_MS = 5 * 60 * 60 * 1000;
 
-async function insertInvoiceWithTransferCode(supabaseAdmin: any, invoice: Record<string, unknown>, maxCode: number) {
+async function insertInvoiceWithTransferCode(supabaseAdmin: any, invoice: Record<string, unknown>) {
   if (invoice.payment_method !== "transfer") {
     const { error } = await supabaseAdmin.from("invoices").insert({ ...invoice, transfer_code: null });
     return { error, transferCode: 0 };
-  }
-
-  const codeLimit = Math.min(999, Math.ceil(maxCode) - 1);
-  if (codeLimit < 1) {
-    return { error: { message: "Harga paket terlalu kecil untuk membuat kode transfer tiga digit." }, transferCode: 0 };
   }
 
   const { data: activeInvoices, error: lookupError } = await supabaseAdmin
@@ -30,8 +25,8 @@ async function insertInvoiceWithTransferCode(supabaseAdmin: any, invoice: Record
   if (lookupError) return { error: lookupError, transferCode: 0 };
 
   const usedCodes = new Set((activeInvoices || []).map((item: { transfer_code: number }) => Number(item.transfer_code)));
-  for (let attempt = 0; attempt < codeLimit; attempt += 1) {
-    const availableCodes = Array.from({ length: codeLimit }, (_, index) => index + 1)
+  for (let attempt = 0; attempt < 999; attempt += 1) {
+    const availableCodes = Array.from({ length: 999 }, (_, index) => index + 1)
       .filter((code) => !usedCodes.has(code));
     if (availableCodes.length === 0) {
       return { error: { message: "Semua kode transfer sedang digunakan. Silakan coba beberapa saat lagi." }, transferCode: 0 };
@@ -189,7 +184,7 @@ export async function createNewBookingAction(payload: any) {
       payment_method: paymentMethod,
       payment_status: 'unpaid',
       payment_expires_at: new Date(Date.parse(booking.created_at) + PAYMENT_WINDOW_MS).toISOString(),
-    }, paymentPlan === "dp" ? totalPrice - dpAmount : 1000);
+    });
 
   if (invoiceResult.error) {
     await supabaseAdmin.from("bookings").delete().eq("id", booking.id);
@@ -279,7 +274,7 @@ export async function createPublicBookingAction(payload: any) {
       payment_method: paymentMethod,
       payment_status: 'unpaid',
       payment_expires_at: new Date(Date.parse(booking.created_at) + PAYMENT_WINDOW_MS).toISOString(),
-    }, paymentPlan === "dp" ? totalPrice - dpAmount : 1000);
+    });
 
   if (invoiceResult.error) {
     await supabaseAdmin.from('bookings').delete().eq('id', booking.id).then();
