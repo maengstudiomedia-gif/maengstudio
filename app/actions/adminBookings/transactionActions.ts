@@ -113,6 +113,9 @@ export async function updateBookingPaymentAction(bookingId: string, paymentType:
     await requireAdmin();
     if (!bookingId) return { success: false, error: "ID pesanan tidak ditemukan." };
 
+    const { error: expirationError } = await supabaseAdmin.rpc("expire_overdue_bookings");
+    if (expirationError) throw new Error(expirationError.message);
+
     const { data: booking, error: bookingError } = await supabaseAdmin
       .from("bookings").select("id,event_details,status,notes").eq("id", bookingId).single();
     if (bookingError) throw new Error(bookingError.message);
@@ -120,6 +123,9 @@ export async function updateBookingPaymentAction(bookingId: string, paymentType:
     const { data: invoice, error: invoiceError } = await supabaseAdmin
       .from("invoices").select("*").eq("booking_id", bookingId).single();
     if (invoiceError) throw new Error(invoiceError.message);
+    if (invoice.payment_status === "expired" || booking.status === "cancelled") {
+      return { success: false, error: "Batas waktu pembayaran sudah habis dan pesanan telah dibatalkan." };
+    }
 
     const totalAmount = Number(invoice.total_amount || 0);
     let nextPaid = Number(invoice.paid_amount || 0);

@@ -8,11 +8,16 @@ import { buildAdminCalendarDayEntries } from "@/lib/bookingCalendar/buildAdminCa
 import { validateDatesAgainstCapacity } from "@/lib/bookingCalendar/validateDatesAgainstCapacity";
 
 async function fetchBookingsForCalendar() {
+  const { error: expirationError } = await supabaseAdmin.rpc("expire_overdue_bookings");
+  if (expirationError) throw new Error(expirationError.message);
+
   const { data, error } = await supabaseAdmin
     .from("bookings")
-    .select("id, client_name, event_details");
+    .select("id, client_name, event_details, status");
   if (error) throw new Error(error.message);
-  return (data || []) as Array<{ id: string; client_name?: string | null; event_details: unknown }>;
+  return (data || [])
+    .filter((booking) => booking.status !== "cancelled")
+    .map(({ id, client_name, event_details }) => ({ id, client_name, event_details }));
 }
 
 /** Kalender publik: per tanggal jumlah pesanan & status penuh (tanpa nama). */

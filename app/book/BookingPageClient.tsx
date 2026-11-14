@@ -281,7 +281,7 @@ export default function BookingPageClient({
           <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 text-sm text-white/75">
             <h2 className="font-semibold text-white">Nominal pembayaran awal</h2>
             <p className="mt-2 text-2xl font-bold text-amber-300">{formatRupiah(paymentSummary.amount)}</p>
-            {paymentSummary.transferCode !== null && <p className="mt-2">Kode pembeda transfer: <strong className="text-white">{String(paymentSummary.transferCode).padStart(3, "0")}</strong></p>}
+            {paymentSummary.transferCode !== null && <p className="mt-2">Kode pembeda QRIS: <strong className="text-white">{String(paymentSummary.transferCode).padStart(3, "0")}</strong></p>}
             {paymentPlan === "dp" && <p className="mt-1 text-xs text-white/55">Sisa pelunasan setelah DP: {formatRupiah(paymentSummary.settlementAmount)}</p>}
           </section>
         )}
@@ -598,7 +598,7 @@ export default function BookingPageClient({
                 <div className="grid grid-cols-2 gap-2">
                   <label className={`cursor-pointer rounded-2xl border p-3 text-sm ${paymentMethod === "transfer" ? "border-amber-400 bg-amber-500/10" : "border-white/10 bg-white/[0.02]"}`}>
                     <input type="radio" name="payment-method" value="transfer" checked={paymentMethod === "transfer"} onChange={() => setPaymentMethod("transfer")} className="sr-only" />
-                    <span className="font-semibold text-white">Transfer</span>
+                    <span className="font-semibold text-white">QRIS</span>
                   </label>
                   <label className={`cursor-pointer rounded-2xl border p-3 text-sm ${paymentMethod === "cash" ? "border-amber-400 bg-amber-500/10" : "border-white/10 bg-white/[0.02]"}`}>
                     <input type="radio" name="payment-method" value="cash" checked={paymentMethod === "cash"} onChange={() => setPaymentMethod("cash")} className="sr-only" />
@@ -608,7 +608,11 @@ export default function BookingPageClient({
               </fieldset>
               {paymentMethod === "transfer" ? (
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <PaymentAccounts theme="dark" showConfirmation />
+                  <PaymentAccounts
+                    amount={paymentSummary?.amount ?? (paymentPlan === "full" ? totalPrice : dpAmount)}
+                    theme="dark"
+                    showConfirmation
+                  />
                 </div>
               ) : (
                 <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm space-y-2">

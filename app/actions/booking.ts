@@ -8,6 +8,8 @@ import { calculatePackageTotal, MAX_BOOKING_EVENT_DAYS } from "@/lib/package-eve
 import { calculateExpectedSettlement, calculateInitialPaymentAmount } from "@/lib/transfer-payment";
 import { validateBookingEventDatesAction, revalidateBookingCalendarPaths } from "@/app/actions/bookingCalendarActions";
 
+const PAYMENT_WINDOW_MS = 5 * 60 * 60 * 1000;
+
 async function insertInvoiceWithTransferCode(supabaseAdmin: any, invoice: Record<string, unknown>, maxCode: number) {
   if (invoice.payment_method !== "transfer") {
     const { error } = await supabaseAdmin.from("invoices").insert({ ...invoice, transfer_code: null });
@@ -71,6 +73,16 @@ export async function getClientDashboardData() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { success: false, message: "Unauthorized" };
 
+  const supabaseAdmin = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  );
+  const { error: expirationError } = await supabaseAdmin.rpc("expire_overdue_bookings");
+  if (expirationError) {
+    console.error("Gagal membatalkan pesanan yang melewati batas pembayaran:", expirationError.message);
+    return { success: false, message: "Gagal memeriksa batas waktu pembayaran pesanan." };
+  }
+
   // Ambil data pemesanan milik user yang login
   const { data: bookings } = await supabase
     .from('bookings')
@@ -85,10 +97,6 @@ export async function getClientDashboardData() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false });
 
-  const supabaseAdmin = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
   const { data: profile } = await supabaseAdmin
     .from('profiles')
     .select('balance')
@@ -101,6 +109,7 @@ export async function getClientDashboardData() {
     bookings: bookings || [],
     invoices: invoices || [],
     balance: Number(profile?.balance || 0),
+    serverNow: Date.now(),
   };
 }
 
@@ -178,7 +187,8 @@ export async function createNewBookingAction(payload: any) {
       paid_amount: 0,
       payment_plan: paymentPlan,
       payment_method: paymentMethod,
-      payment_status: 'unpaid'
+      payment_status: 'unpaid',
+      payment_expires_at: new Date(Date.parse(booking.created_at) + PAYMENT_WINDOW_MS).toISOString(),
     }, paymentPlan === "dp" ? totalPrice - dpAmount : 1000);
 
   if (invoiceResult.error) {
@@ -269,7 +279,8 @@ export async function createPublicBookingAction(payload: any) {
       paid_amount: 0,
       payment_plan: paymentPlan,
       payment_method: paymentMethod,
-      payment_status: 'unpaid'
+      payment_status: 'unpaid',
+      payment_expires_at: new Date(Date.parse(booking.created_at) + PAYMENT_WINDOW_MS).toISOString(),
     }, paymentPlan === "dp" ? totalPrice - dpAmount : 1000);
 
   if (invoiceResult.error) {

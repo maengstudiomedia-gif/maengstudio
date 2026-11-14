@@ -1,47 +1,96 @@
-const PAYMENT_ACCOUNTS = [
-  { name: "BCA", number: "8435901499", mark: "BCA", markClass: "text-[#00529c]" },
-  { name: "SeaBank", number: "901760387739", mark: "SeaBank", markClass: "text-[#ed6b24]" },
-  { name: "DANA", number: "08117873878", mark: "DANA", markClass: "text-[#118eea]" },
-];
+"use client";
+
+import { useEffect, useState } from "react";
+import { Download, Loader2 } from "lucide-react";
+import { getPublicQrisAction } from "@/app/actions/qrisActions";
 
 export default function PaymentAccounts({
+  amount,
   theme = "light",
   showConfirmation = false,
 }: {
+  amount: number;
   theme?: "dark" | "light";
   showConfirmation?: boolean;
 }) {
   const isDark = theme === "dark";
+  const [qrisImageUrl, setQrisImageUrl] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+
+    getPublicQrisAction()
+      .then((result) => {
+        if (!active) return;
+        if (result.success) setQrisImageUrl(result.imageUrl ?? null);
+        else setError(result.error || "QRIS gagal dimuat.");
+      })
+      .catch((loadError: unknown) => {
+        console.error("Gagal memuat QRIS:", loadError);
+        if (active) setError("QRIS gagal dimuat. Silakan coba beberapa saat lagi.");
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const formatRupiah = (value: number) =>
+    new Intl.NumberFormat("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      maximumFractionDigits: 0,
+    }).format(Number(value || 0));
+
+  const fileExtension = qrisImageUrl?.split("?")[0].split(".").pop()?.toLowerCase() || "png";
+  const downloadFileName = `QRIS-Maeng-Studio.${fileExtension}`;
+  const textColor = isDark ? "text-white/75" : "text-[#52645a]";
 
   return (
-    <div className="space-y-2">
-      <p className={`text-xs font-semibold ${isDark ? "text-white/75" : "text-[#52645a]"}`}>
-        Transfer Bank / E-wallet · a.n. Guntur Bayu Jantoro
-      </p>
-      {PAYMENT_ACCOUNTS.map((account) => (
-        <div
-          key={account.name}
-          className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${
-            isDark ? "border-white/10 bg-white/[0.04]" : "border-[#e8eee9] bg-white"
-          }`}
-        >
-          <span
-            aria-hidden="true"
-            className={`grid h-9 min-w-14 place-items-center rounded-lg bg-white px-2 text-[11px] font-black ${account.markClass}`}
-          >
-            {account.mark}
-          </span>
-          <div className="min-w-0">
-            <p className={`text-[10px] ${isDark ? "text-white/45" : "text-[#819087]"}`}>{account.name}</p>
-            <p className={`font-mono text-xs font-semibold ${isDark ? "text-white/80" : "text-[#27362d]"}`}>
-              {account.number}
-            </p>
-          </div>
+    <div className="space-y-3">
+      <p className={`text-xs font-semibold ${textColor}`}>Pembayaran QRIS</p>
+      {isLoading ? (
+        <div className={`flex items-center justify-center gap-2 rounded-xl border p-6 text-xs ${isDark ? "border-white/10 text-white/55" : "border-[#e8eee9] text-[#718078]"}`}>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Memuat QRIS...
         </div>
-      ))}
+      ) : error ? (
+        <p role="alert" className={`rounded-xl border p-3 text-xs ${isDark ? "border-red-400/20 bg-red-400/5 text-red-200" : "border-red-200 bg-red-50 text-red-700"}`}>
+          {error}
+        </p>
+      ) : qrisImageUrl ? (
+        <>
+          <div className="rounded-xl border border-[#e8eee9] bg-white p-2">
+            <img src={qrisImageUrl} alt="Kode pembayaran QRIS Maeng Studio" className="mx-auto max-h-72 w-full object-contain" />
+          </div>
+          <a
+            href={`${qrisImageUrl}${qrisImageUrl.includes("?") ? "&" : "?"}download=${downloadFileName}`}
+            download={downloadFileName}
+            className={`flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold transition ${
+              isDark ? "bg-amber-400 text-black hover:bg-amber-300" : "bg-[#087b45] text-white hover:bg-[#06683a]"
+            }`}
+          >
+            <Download className="h-4 w-4" />
+            Unduh QRIS
+          </a>
+          <div className={`border-t pt-3 ${isDark ? "border-white/10" : "border-[#edf1ee]"}`}>
+            <p className={`text-xs ${isDark ? "text-white/55" : "text-[#718078]"}`}>Nominal yang harus dibayar</p>
+            <p className={`mt-1 text-lg font-bold ${isDark ? "text-amber-300" : "text-[#087b45]"}`}>{formatRupiah(amount)}</p>
+          </div>
+        </>
+      ) : (
+        <p className={`rounded-xl border p-3 text-xs ${isDark ? "border-white/10 text-white/55" : "border-[#e8eee9] text-[#718078]"}`}>
+          QRIS belum tersedia. Silakan hubungi admin untuk metode pembayaran.
+        </p>
+      )}
       {showConfirmation && (
         <p className={`border-t pt-2 text-xs ${isDark ? "border-white/10 text-white/55" : "border-[#edf1ee] text-[#718078]"}`}>
-          Setelah transfer, konfirmasi melalui WhatsApp.
+          Setelah membayar, konfirmasi melalui WhatsApp.
         </p>
       )}
     </div>
