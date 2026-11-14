@@ -50,6 +50,7 @@ type DashboardBooking = {
   package_name: string;
   created_at: string;
   event_details?: unknown;
+  status?: string;
   invoice?: {
     total_amount: number;
     paid_amount: number;
