@@ -14,13 +14,33 @@ interface PackageProps {
   onBooking: () => void; // Definisi props onBooking
 }
 
+function parsePackageList(value: unknown, field: "features" | "print_results"): string[] {
+  if (Array.isArray(value)) return value.map(String);
+  if (value == null || value === "") return [];
+
+  if (typeof value !== "string") {
+    console.error(`Invalid package ${field} data: expected an array or JSON string.`);
+    return [];
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (Array.isArray(parsed)) return parsed.map(String);
+    console.error(`Invalid package ${field} data: expected a JSON array.`);
+  } catch (error) {
+    console.error(`Failed to parse package ${field} JSON:`, error);
+  }
+
+  return [];
+}
+
 // 2. PASTIKAN onBooking ditambahkan di dalam kurung kurawal parameter ini:
 export default function PackageCard({ pkg, onEdit, onDelete, onBooking }: PackageProps) {
   const [showPoster, setShowPoster] = useState(false);
   
   // Parsing JSON fitur & cetakan
-  const featuresList = typeof pkg.features === 'string' ? JSON.parse(pkg.features) : (pkg.features || []);
-  const printsList = typeof pkg.print_results === 'string' ? JSON.parse(pkg.print_results) : (pkg.print_results || []);
+  const featuresList = parsePackageList(pkg.features, "features");
+  const printsList = parsePackageList(pkg.print_results, "print_results");
   
   const isAudio = String(pkg.type).toLowerCase() === "audio";
   const categoryLabel = getPackageCategoryLabel(pkg.type);
